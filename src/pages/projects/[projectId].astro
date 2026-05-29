@@ -3,6 +3,8 @@ import AppLayout from "../../layouts/AppLayout.astro";
 import { ProjectService } from "../../lib/services/project.service";
 import { IssueService } from "../../lib/services/issue.service";
 import { SprintService } from "../../lib/services/sprint.service";
+import { ProjectMemberRepo } from "../../lib/repositories/project-member.repo";
+import { hasPermission } from "../../lib/auth/permissions";
 import Button from "../../components/ui/Button.astro";
 import Input from "../../components/ui/Input.astro";
 import Modal from "../../components/ui/Modal.astro";
@@ -15,6 +17,7 @@ let project: any;
 let issues: any[] = [];
 let issuesByList: Record<string, any[]> = {};
 let activeSprint: any = null;
+let canManageLists = false;
 
 if (projectId && Astro.locals.user) {
   try {
@@ -23,6 +26,10 @@ if (projectId && Astro.locals.user) {
       return Astro.redirect('/projects');
     }
     project = p;
+
+    const currentMember = await ProjectMemberRepo.getMember(projectId, Astro.locals.user._id!.toString());
+    canManageLists = currentMember ? hasPermission(currentMember.role, 'lists.manage') : false;
+
     issues = await IssueService.getIssuesByProject(projectId);
     const sprints = await SprintService.getAllSprints(projectId);
     activeSprint = sprints.find((s: any) => s.status === 'active');
@@ -157,12 +164,14 @@ const colorOptions = [
 
         <div class="h-6 w-px bg-ink-200 dark:bg-ink-700 mx-1"></div>
 
-        <Button
-          variant="secondary"
-          onclick="document.getElementById('create_list_modal').showModal()"
-        >
-          Add list
-        </Button>
+        {canManageLists && (
+          <Button
+            variant="secondary"
+            onclick="document.getElementById('create_list_modal').showModal()"
+          >
+            Add list
+          </Button>
+        )}
       </div>
     </div>
 
@@ -199,7 +208,7 @@ const colorOptions = [
 
                         <!-- Header -->
                         <div
-                          class="px-4 py-3 bg-surface-100 dark:bg-ink-800/60 border-b border-ink-100/70 dark:border-ink-700/60 flex items-center justify-between gap-2 handle cursor-grab active:cursor-grabbing"
+                          class={`px-4 py-3 bg-surface-100 dark:bg-ink-800/60 border-b border-ink-100/70 dark:border-ink-700/60 flex items-center justify-between gap-2${canManageLists ? ' handle cursor-grab active:cursor-grabbing' : ''}`}
                         >
                           <div class="min-w-0 flex items-center gap-2">
                             <span
