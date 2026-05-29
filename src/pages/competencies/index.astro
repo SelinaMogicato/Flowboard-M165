@@ -1,0 +1,229 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const competencies = [
+  {
+    codes: ["B1F", "B1E"],
+    title: "NoSQL-Datenmodell",
+    slug: "nosql-model",
+    description:
+      "Ich hab das Datenmodell für FlowBoard komplett in MongoDB aufgebaut. Sechs Collections, klare Überlegungen zu Embedding vs. Referencing, und Indexes für die häufigsten Queries. Das war ehrlich gesagt spannender als ich dachte — man muss wirklich früh überlegen, wie die Daten später gelesen werden.",
+    files: [
+      "src/lib/db/mongo.ts",
+      "src/lib/db/indexes.ts",
+      "src/lib/db/schema-docs.ts",
+      "src/lib/repositories/",
+    ],
+    icon: "database",
+  },
+  {
+    codes: ["C1F", "C1E"],
+    title: "Datenimport",
+    slug: "data-import",
+    description:
+      "User können Issues per CSV hochladen. Im Backend validiere ich jeden Eintrag bevor er in die Datenbank kommt — falsche Felder, fehlende Pflichtfelder, ungültige Werte. Fehlerhafte Zeilen werden einzeln gemeldet statt den ganzen Import einfach zu blockieren.",
+    files: [
+      "src/pages/api/issues/import.ts",
+      "src/pages/competencies/data-import.astro",
+      "src/lib/services/issueService.ts",
+    ],
+    icon: "upload",
+  },
+  {
+    codes: ["D1F", "D1E"],
+    title: "Zugriffskontrolle",
+    slug: "access-control",
+    description:
+      "Ohne Login kommt man nirgendwo rein. Innerhalb von Projekten gibt es Rollen: Owner darf alles, Member kann Issues bearbeiten aber keine Projektverwaltung machen. Die Überprüfung läuft im Middleware bevor die Seite überhaupt geladen wird.",
+    files: [
+      "src/middleware.ts",
+      "src/lib/auth/session.ts",
+      "src/lib/repositories/projectMemberRepository.ts",
+    ],
+    icon: "shield",
+  },
+  {
+    codes: ["E1F", "E1E"],
+    title: "Backup & Wiederherstellung",
+    slug: "backup-restore",
+    description:
+      "Ich hab zwei Shell-Scripts gebaut — eines für den Export mit mongodump, eines für den Restore mit mongorestore. Backups werden mit Zeitstempel in einem eigenen Ordner gespeichert. Im Ernstfall kann man damit die Datenbank auf einen bestimmten Stand zurücksetzen.",
+    files: ["scripts/db-backup.sh", "scripts/db-restore.sh"],
+    icon: "archive",
+  },
+  {
+    codes: ["G1F", "G1E"],
+    title: "API & Aggregation",
+    slug: "api-aggregation",
+    description:
+      "FlowBoard hat eine eigene REST API für alle Datenoperationen. Für Statistiken nutze ich MongoDB Aggregation Pipelines — die zählen Issues nach Status, Priorität und Assignee direkt in der DB, ohne dass ich das alles selbst in JavaScript berechnen müsste.",
+    files: [
+      "src/pages/api/",
+      "src/lib/repositories/issueRepository.ts",
+      "src/lib/services/statsService.ts",
+    ],
+    icon: "chart",
+  },
+];
+
+const iconPaths: Record<string, string> = {
+  database:
+    "M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125",
+  upload:
+    "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5",
+  shield:
+    "M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z",
+  archive:
+    "M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z",
+  chart:
+    "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z",
+};
+---
+
+<AppLayout>
+  <div class="max-w-5xl mx-auto space-y-10">
+
+    <!-- Page header -->
+    <div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-white mb-2">Kompetenzübersicht</h1>
+      <p class="text-ink-500 dark:text-ink-400">Modul 165 &mdash; Alle umgesetzten Kompetenzen auf einen Blick</p>
+    </div>
+
+    <!-- Intro -->
+    <Card>
+      <h2 class="text-xl font-semibold text-ink-900 dark:text-white mb-3">Was ich in diesem Modul gemacht habe</h2>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed">
+        In Modul 165 habe ich FlowBoard als Praxisprojekt entwickelt — ein echtes Scrum-Board mit MongoDB im Hintergrund.
+        Statt einem separaten Demo-Projekt hab ich alle Kompetenzen direkt in die App integriert, damit man sieht wie
+        die Konzepte in einem richtigen Projekt funktionieren. Diese Seite gibt einen schnellen Überblick über alle
+        fünf Kompetenzbereiche. Jede Karte verlinkt auf die ausführliche Detailseite.
+      </p>
+    </Card>
+
+    <!-- Competency cards -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Umgesetzte Kompetenzen</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">5 Kompetenzbereiche, jeweils mit einer F- und einer E-Handlungskompetenz</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {competencies.map((c) => (
+          <Card>
+            <div class="flex items-start gap-3 mb-4">
+              <div class="w-10 h-10 rounded-2xl bg-peach-100 dark:bg-peach-900/30 flex items-center justify-center flex-none">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="w-5 h-5 text-peach-600 dark:text-peach-400"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d={iconPaths[c.icon]} />
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="flex flex-wrap gap-1.5 mb-1">
+                  {c.codes.map((code) => (
+                    <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-0.5 rounded">
+                      {code}
+                    </span>
+                  ))}
+                </div>
+                <h3 class="text-lg font-semibold text-ink-900 dark:text-white leading-tight">{c.title}</h3>
+              </div>
+            </div>
+
+            <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-4">{c.description}</p>
+
+            <div class="mb-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-ink-500 mb-1.5">
+                Relevante Dateien
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                {c.files.map((f) => (
+                  <span class="text-xs bg-surface-200 dark:bg-ink-700 text-ink-600 dark:text-ink-300 px-2 py-0.5 rounded font-mono">
+                    {f}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-ink-100 dark:border-ink-700">
+              <a
+                href={`/competencies/${c.slug}`}
+                class="inline-flex items-center gap-1.5 text-sm font-medium text-peach-600 dark:text-peach-400 hover:text-peach-700 dark:hover:text-peach-300 transition-colors"
+              >
+                Zur Detailseite
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  class="w-4 h-4"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </a>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
+
+    <!-- Summary table -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Alle Kompetenzen auf einen Blick</h2>
+      </div>
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Code</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Thema</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Detailseite</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              {competencies.map((c) => (
+                <tr>
+                  <td class="py-3 pr-6 align-top">
+                    <div class="flex flex-wrap gap-1">
+                      {c.codes.map((code) => (
+                        <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-0.5 rounded">
+                          {code}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td class="py-3 pr-6 text-ink-700 dark:text-ink-300 align-top">{c.title}</td>
+                  <td class="py-3 align-top">
+                    <a
+                      href={`/competencies/${c.slug}`}
+                      class="text-peach-600 dark:text-peach-400 hover:underline font-mono text-xs"
+                    >
+                      /competencies/{c.slug}
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+  </div>
+</AppLayout>
