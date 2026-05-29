@@ -1,0 +1,118 @@
+---
+// FlowBoard Modal (dialog)
+// - Layered UI: Surface 1 container + Surface 2 header
+// - Soft shadow via shadow-card token
+// - Subtle backdrop (no heavy blur/glass)
+// - Click outside closes (optional, but UX nice)
+// - Focus ring Peach (a11y)
+
+interface Props {
+  id: string;
+  title: string;
+}
+
+const { id, title } = Astro.props;
+---
+
+<dialog
+  id={id}
+  class="m-0 p-0 bg-transparent backdrop:bg-ink-900/35 backdrop:backdrop-blur-[2px]"
+>
+  <!-- Backdrop click target -->
+  <div
+    class="fixed inset-0 p-4 sm:p-6 flex items-center justify-center"
+    data-modal-root
+  >
+    <!-- Panel -->
+    <div
+      class="w-full max-w-lg overflow-hidden
+             rounded-3xl shadow-card
+             bg-surface-50 dark:bg-ink-900
+             border border-ink-100/70 dark:border-ink-700/60
+             animate-in fade-in zoom-in-95 duration-200"
+      role="document"
+    >
+      <!-- Header (Surface 2) -->
+      <div
+        class="flex items-center justify-between gap-4
+               px-6 py-4
+               bg-surface-100 dark:bg-ink-800
+               border-b border-ink-100/70 dark:border-ink-700/60"
+      >
+        <h3
+          class="text-lg font-semibold text-ink-900 dark:text-ink-100 truncate"
+        >
+          {title}
+        </h3>
+
+        <button
+          type="button"
+          aria-label="Close"
+          class="p-2 rounded-xl transition-colors
+                 text-ink-500 hover:text-ink-900 hover:bg-ink-100
+                 dark:text-ink-400 dark:hover:text-ink-100 dark:hover:bg-ink-800
+                 focus:outline-none focus-visible:ring-2 focus-visible:ring-peach-300/70"
+          onclick={`document.getElementById('${id}').close()`}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="px-6 py-5">
+        <slot />
+      </div>
+    </div>
+  </div>
+
+  <!-- Close on backdrop click -->
+  <script is:inline define:vars={{ id }}>
+    (() => {
+      const dialog = document.getElementById(id);
+      if (!dialog) return;
+
+      // Close when clicking outside the panel
+      dialog.addEventListener("click", (e) => {
+        const root = dialog.querySelector("[data-modal-root]");
+        if (!root) return;
+
+        // If click is on the root container (backdrop area), close
+        if (e.target === root) dialog.close();
+      });
+    })();
+  </script>
+</dialog>
+
+<style>
+  dialog::backdrop {
+    animation: fb-backdrop-in 200ms ease-out;
+  }
+
+  @keyframes fb-backdrop-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Remove default dialog outline in some browsers */
+  dialog:focus {
+    outline: none;
+  }
+</style>

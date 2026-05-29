@@ -1,0 +1,40 @@
+---
+// FlowBoard Badge
+// - Calm semantic colors (muted)
+// - Layered look (soft background + subtle border)
+// - Dark mode not inverted but layered
+
+interface Props {
+  label: string;
+  variant?: "neutral" | "success" | "warning" | "danger";
+}
+
+const { label, variant = "neutral" } = Astro.props;
+
+const base =
+  "inline-flex items-center rounded-full px-2.5 py-1 " +
+  "text-xs font-medium tracking-wide " +
+  "border transition-colors duration-200";
+
+const variants = {
+  neutral:
+    "bg-surface-200/70 text-ink-600 border-ink-100/70 " +
+    "dark:bg-ink-800/60 dark:text-ink-300 dark:border-ink-700/60",
+
+  success:
+    "bg-emerald-50 text-emerald-700 border-emerald-100/70 " +
+    "dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/30",
+
+  warning:
+    "bg-amber-50 text-amber-700 border-amber-100/70 " +
+    "dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-900/30",
+
+  danger:
+    "bg-red-50 text-red-700 border-red-100/70 " +
+    "dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/30",
+};
+---
+
+<span class:list={[base, variants[variant]]}>
+  {label}
+</span>

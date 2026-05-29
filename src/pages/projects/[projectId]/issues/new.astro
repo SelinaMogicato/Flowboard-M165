@@ -1,0 +1,222 @@
+---
+import AppLayout from "../../../../layouts/AppLayout.astro";
+import { ProjectService } from "../../../../lib/services/project.service";
+import Input from "../../../../components/ui/Input.astro";
+import Button from "../../../../components/ui/Button.astro";
+
+const { projectId } = Astro.params;
+let project;
+
+if (projectId) {
+  try {
+    project = await ProjectService.getProjectById(projectId);
+  } catch (error) {
+    console.error("Failed to fetch project:", error);
+    return Astro.redirect("/404");
+  }
+}
+
+if (!project) {
+  return Astro.redirect("/404");
+}
+
+// Find default list (Backlog or first list)
+const defaultList =
+  project.lists.find((l) => l.title === "Backlog") || project.lists[0];
+const defaultListId = defaultList ? defaultList.id : "";
+---
+
+<AppLayout title={`New Issue - ${project.name}`}>
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8 border-b border-ink-200 dark:border-ink-700 pb-1">
+      <div class="flex items-center gap-2 mb-4 text-sm text-ink-500">
+        <a href={`/projects/${projectId}/issues`} class="hover:underline"
+          >Issues</a
+        >
+        <span>/</span>
+        <span class="font-medium text-ink-900 dark:text-ink-50">New</span>
+      </div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-ink-50 mb-1">
+        New Issue
+      </h1>
+    </div>
+
+    <form id="create-issue-form" class="space-y-6">
+      <input type="hidden" name="listId" value={defaultListId} />
+
+      <div class="space-y-4">
+        <Input
+          name="title"
+          label="Title"
+          placeholder="Add a title"
+          required
+          class="text-lg font-medium"
+        />
+
+        <div>
+          <label
+            class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1"
+          >
+            Description
+          </label>
+          <div
+            class="relative rounded-xl border border-ink-200 dark:border-ink-700 bg-surface-50 dark:bg-ink-900 shadow-sm focus-within:ring-2 focus-within:ring-peach-500/50 focus-within:border-peach-500 transition-all"
+          >
+            <!-- Toolbar mockup -->
+            <div
+              class="flex items-center gap-1 p-2 border-b border-ink-100 dark:border-ink-800 bg-surface-100/50 dark:bg-ink-800/30 rounded-t-xl text-ink-500"
+            >
+              <button
+                type="button"
+                class="p-1.5 hover:bg-ink-200 dark:hover:bg-ink-700 rounded transition-colors"
+                title="Bold"><strong class="font-bold serik">B</strong></button
+              >
+              <button
+                type="button"
+                class="p-1.5 hover:bg-ink-200 dark:hover:bg-ink-700 rounded transition-colors italic font-serif"
+                title="Italic">I</button
+              >
+              <div class="w-px h-4 bg-ink-200 dark:bg-ink-700 mx-1"></div>
+              <button
+                type="button"
+                class="p-1.5 hover:bg-ink-200 dark:hover:bg-ink-700 rounded transition-colors text-xs"
+                title="Code">&lt;/&gt;</button
+              >
+              <button
+                type="button"
+                class="p-1.5 hover:bg-ink-200 dark:hover:bg-ink-700 rounded transition-colors text-xs"
+                title="Link">link</button
+              >
+            </div>
+            <textarea
+              name="description"
+              rows="8"
+              class="block w-full border-0 bg-transparent p-3 text-ink-900 dark:text-ink-100 placeholder:text-ink-400 focus:ring-0 sm:text-sm resize-y min-h-[150px]"
+              placeholder="Write a description..."></textarea>
+            <div
+              class="p-2 text-xs text-ink-400 dark:text-ink-500 border-t border-ink-100 dark:border-ink-800 bg-surface-50 dark:bg-ink-900 rounded-b-xl flex justify-between"
+            >
+              <span>Markdown supported</span>
+              <span>Attach files by dragging & dropping</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+          <div class="space-y-4">
+            <div>
+              <label
+                class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1"
+              >
+                Priority
+              </label>
+              <select
+                name="priority"
+                class="block w-full rounded-xl border-ink-200 dark:border-ink-700 bg-surface-50 dark:bg-ink-900 shadow-sm focus:border-peach-500 focus:ring-peach-500 sm:text-sm py-2.5 px-3"
+              >
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1"
+              >
+                Labels
+              </label>
+              <input
+                type="text"
+                name="labels"
+                placeholder="e.g. bug, enhancement (comma separated)"
+                class="block w-full rounded-xl border-ink-200 dark:border-ink-700 bg-surface-50 dark:bg-ink-900 shadow-sm focus:border-peach-500 focus:ring-peach-500 sm:text-sm py-2.5 px-3"
+              />
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label
+                class="block text-sm font-medium text-ink-700 dark:text-ink-200 mb-1"
+              >
+                Status (Initial List)
+              </label>
+              <select
+                name="listId"
+                class="block w-full rounded-xl border-ink-200 dark:border-ink-700 bg-surface-50 dark:bg-ink-900 shadow-sm focus:border-peach-500 focus:ring-peach-500 sm:text-sm py-2.5 px-3"
+              >
+                {
+                  project.lists.map((list) => (
+                    <option
+                      value={list.id}
+                      selected={list.id === defaultListId}
+                    >
+                      {list.title}
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="flex items-center justify-end gap-3 pt-6 border-t border-ink-200 dark:border-ink-700"
+      >
+        <a
+          href={`/projects/${projectId}/issues`}
+          class="px-4 py-2 text-sm font-medium text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100 transition-colors"
+        >
+          Cancel
+        </a>
+        <Button type="submit">Create Issue</Button>
+      </div>
+    </form>
+  </div>
+</AppLayout>
+
+<script define:vars={{ projectId }}>
+  const form = document.getElementById("create-issue-form");
+
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+
+    // Handle labels splitting
+    const labelsInput = formData.get("labels");
+    const labels = labelsInput
+      ? labelsInput
+          .split(",")
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : [];
+
+    const data = {
+      listId: formData.get("listId"),
+      title: formData.get("title"),
+      description: formData.get("description"),
+      priority: formData.get("priority"),
+      assignee: formData.get("assignee") || null,
+      labels: labels,
+    };
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/issues`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        window.location.href = `/projects/${projectId}/issues`;
+      } else {
+        alert("Failed to create issue");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error creating issue");
+    }
+  });
+</script>

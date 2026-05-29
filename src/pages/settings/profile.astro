@@ -1,0 +1,225 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+import Input from "../../components/ui/Input.astro";
+import Button from "../../components/ui/Button.astro";
+import { getSessionFromRequest } from "../../lib/auth/session";
+import { UserService } from "../../lib/services/user.service";
+
+const session = await getSessionFromRequest(Astro.cookies);
+if (!session || !session.user._id) return Astro.redirect("/login");
+
+const user = await UserService.getUserProfile(session.user._id.toString());
+if (!user) return Astro.redirect("/login"); // Should not happen
+---
+
+<AppLayout title="Profile Settings">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-ink-50">
+        Profile Settings
+      </h1>
+      <p class="text-ink-500 dark:text-ink-400 mt-2">
+        Manage your account information and password.
+      </p>
+    </div>
+
+    <div class="space-y-8">
+      <!-- Profile Information -->
+      <section>
+        <h2 class="text-xl font-semibold text-ink-900 dark:text-ink-50 mb-4">
+          Personal Information
+        </h2>
+        <Card class="bg-white dark:bg-ink-800">
+          <form id="profile-form" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input
+                name="name"
+                label="Display Name"
+                value={user.name || ""}
+                required
+                minlength="2"
+                maxlength="50"
+              />
+              <Input
+                name="email"
+                label="Email Address"
+                value={user.email}
+                disabled
+                class="opacity-70 cursor-not-allowed"
+                title="Email cannot be changed"
+              />
+            </div>
+
+            <div class="flex items-center justify-end gap-4 pt-2">
+              <p id="profile-message" class="text-sm font-medium hidden"></p>
+              <Button type="submit" variant="primary"> Save Profile </Button>
+            </div>
+          </form>
+        </Card>
+      </section>
+
+      <!-- Password -->
+      <section>
+        <h2 class="text-xl font-semibold text-ink-900 dark:text-ink-50 mb-4">
+          Security
+        </h2>
+        <Card class="bg-white dark:bg-ink-800">
+          <form id="password-form" class="space-y-6">
+            <Input
+              name="currentPassword"
+              type="password"
+              label="Current Password"
+              required
+            />
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input
+                name="newPassword"
+                type="password"
+                label="New Password"
+                required
+                minlength="8"
+              />
+              <Input
+                name="confirmPassword"
+                type="password"
+                label="Confirm New Password"
+                required
+                minlength="8"
+              />
+            </div>
+
+            <div class="flex items-center justify-end gap-4 pt-2">
+              <p id="password-message" class="text-sm font-medium hidden"></p>
+              <Button type="submit" variant="secondary">
+                Update Password
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </section>
+    </div>
+  </div>
+</AppLayout>
+
+<script>
+  // Profile Form
+  const profileForm = document.getElementById(
+    "profile-form",
+  ) as HTMLFormElement;
+  const profileMessage = document.getElementById("profile-message")!;
+
+  profileForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(profileForm);
+    const data = { name: formData.get("name") };
+    const btn = profileForm.querySelector(
+      'button[type="submit"]',
+    ) as HTMLButtonElement;
+
+    // Reset message
+    profileMessage.classList.add("hidden");
+    profileMessage.className = "text-sm font-medium hidden";
+
+    // Loading state
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "Saving...";
+
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      profileMessage.classList.remove("hidden");
+      if (res.ok) {
+        profileMessage.textContent = "Profile updated successfully";
+        profileMessage.classList.add("text-green-600", "dark:text-green-400");
+        setTimeout(() => {
+          profileMessage.classList.add("hidden");
+        }, 3000);
+      } else {
+        profileMessage.textContent = result.error || "Failed to update profile";
+        profileMessage.classList.add("text-red-600", "dark:text-red-400");
+      }
+    } catch (err) {
+      profileMessage.classList.remove("hidden");
+      profileMessage.textContent = "An error occurred";
+      profileMessage.classList.add("text-red-600", "dark:text-red-400");
+    } finally {
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
+  });
+
+  // Password Form
+  const passwordForm = document.getElementById(
+    "password-form",
+  ) as HTMLFormElement;
+  const passwordMessage = document.getElementById("password-message")!;
+
+  passwordForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(passwordForm);
+    const currentPassword = formData.get("currentPassword");
+    const newPassword = formData.get("newPassword");
+    const confirmPassword = formData.get("confirmPassword");
+    const btn = passwordForm.querySelector(
+      'button[type="submit"]',
+    ) as HTMLButtonElement;
+
+    // Basic validation
+    if (newPassword !== confirmPassword) {
+      passwordMessage.classList.remove("hidden");
+      passwordMessage.textContent = "New passwords do not match";
+      passwordMessage.className =
+        "text-sm font-medium text-red-600 dark:text-red-400";
+      return;
+    }
+
+    // Reset message
+    passwordMessage.classList.add("hidden");
+    passwordMessage.className = "text-sm font-medium hidden";
+
+    // Loading state
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "Updating...";
+
+    try {
+      const res = await fetch("/api/users/me/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      });
+
+      const result = await res.json();
+
+      passwordMessage.classList.remove("hidden");
+      if (res.ok) {
+        passwordMessage.textContent = "Password updated successfully";
+        passwordMessage.classList.add("text-green-600", "dark:text-green-400");
+        passwordForm.reset();
+        setTimeout(() => {
+          passwordMessage.classList.add("hidden");
+        }, 3000);
+      } else {
+        passwordMessage.textContent =
+          result.error || "Failed to update password";
+        passwordMessage.classList.add("text-red-600", "dark:text-red-400");
+      }
+    } catch (err) {
+      passwordMessage.classList.remove("hidden");
+      passwordMessage.textContent = "An error occurred";
+      passwordMessage.classList.add("text-red-600", "dark:text-red-400");
+    } finally {
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
+  });
+</script>

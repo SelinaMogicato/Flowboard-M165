@@ -1,0 +1,75 @@
+---
+import Modal from "../ui/Modal.astro";
+import Button from "../ui/Button.astro";
+
+interface Props {
+  id?: string;
+}
+
+const { id = "start_sprint_modal" } = Astro.props;
+---
+
+<Modal id={id} title="Start Sprint?">
+  <div class="space-y-4">
+    <p class="text-ink-600 dark:text-ink-300">
+      Are you sure you want to start this sprint? Any other active sprint must
+      be completed first.
+    </p>
+
+    <input type="hidden" id="start_sprint_id" />
+
+    <div class="flex justify-end gap-3 pt-2">
+      <Button
+        variant="secondary"
+        onclick={`document.getElementById('${id}').close()`}>Cancel</Button
+      >
+      <Button
+        variant="primary"
+        class="!bg-green-600 hover:!bg-green-700 dark:!bg-green-600 dark:hover:!bg-green-500 !text-white border-none"
+        id="confirm_start_sprint">Start Sprint</Button
+      >
+    </div>
+  </div>
+</Modal>
+
+<script>
+  // @ts-nocheck
+  const modal = document.getElementById("start_sprint_modal");
+  const confirmBtn = document.getElementById("confirm_start_sprint");
+  const inputId = document.getElementById("start_sprint_id");
+
+  window.openStartSprintDialog = (sprintId) => {
+    if (inputId) inputId.value = sprintId;
+    if (modal) modal.showModal();
+  };
+
+  confirmBtn?.addEventListener("click", async () => {
+    const sprintId = inputId?.value;
+    if (!sprintId) return;
+
+    const originalText = confirmBtn.textContent;
+    confirmBtn.textContent = "Starting...";
+    confirmBtn.disabled = true;
+
+    try {
+      const res = await fetch(`/api/sprints/${sprintId}/activate`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        window.toast.success("Sprint activated successfully!");
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        window.toast.error(data.error || "Failed to activate sprint");
+      }
+    } catch (err) {
+      console.error(err);
+      window.toast.error("Error activating sprint");
+    } finally {
+      confirmBtn.textContent = originalText;
+      confirmBtn.disabled = false;
+      modal.close();
+    }
+  });
+</script>

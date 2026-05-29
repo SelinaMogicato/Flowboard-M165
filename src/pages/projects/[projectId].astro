@@ -1,0 +1,922 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import { ProjectService } from "../../lib/services/project.service";
+import { IssueService } from "../../lib/services/issue.service";
+import { SprintService } from "../../lib/services/sprint.service";
+import Button from "../../components/ui/Button.astro";
+import Input from "../../components/ui/Input.astro";
+import Modal from "../../components/ui/Modal.astro";
+import DeleteIssueDialog from "../../components/issues/DeleteIssueDialog.astro";
+import IssueEditModal from "../../components/issues/IssueEditModal.astro";
+import type { Issue } from "../../lib/repositories/issue.repo";
+
+const { projectId } = Astro.params;
+let project: any;
+let issues: any[] = [];
+let issuesByList: Record<string, any[]> = {};
+let activeSprint: any = null;
+
+if (projectId && Astro.locals.user) {
+  try {
+    const p = await ProjectService.getProjectById(projectId, Astro.locals.user._id?.toString());
+    if (!p) {
+      return Astro.redirect('/projects');
+    }
+    project = p;
+    issues = await IssueService.getIssuesByProject(projectId);
+    const sprints = await SprintService.getAllSprints(projectId);
+    activeSprint = sprints.find((s: any) => s.status === 'active');
+
+    issues.forEach((issue) => {
+      // @ts-ignore
+      issue.sprintName = issue.sprintId ? sprints.find(s => s._id.toString() === issue.sprintId?.toString())?.name || null : null;
+
+      if (!issuesByList[issue.listId]) {
+        issuesByList[issue.listId] = [];
+      }
+      issuesByList[issue.listId].push(issue);
+    });
+
+    Object.keys(issuesByList).forEach((listId) => {
+      issuesByList[listId].sort((a: any, b: any) => a.order - b.order);
+    });
+  } catch (error) {
+    console.error("Failed to fetch project:", error);
+  }
+}
+
+if (!project) {
+  return Astro.redirect("/404");
+}
+
+const uniqueLabels = Array.from(new Set(issues.flatMap((issue) => issue.labels || []))).sort();
+
+const lists = project.lists || [];
+const colorOptions = [
+  "#6b7280",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
+];
+---
+
+<AppLayout title={project.name}>
+  <div class="h-full min-h-0 flex flex-col">
+    <!-- Project Navigation Header -->
+    <div class="mb-8 border-b border-ink-200 dark:border-ink-700 pb-1">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-3xl font-bold text-ink-900 dark:text-ink-50 flex items-center gap-4">
+          <div>
+            {project.name}
+            <span class="text-ink-400 font-normal text-lg">/ Board</span>
+          </div>
+          {activeSprint && (
+            <a href={`/projects/${projectId}/sprints/${activeSprint._id}`} class="text-sm font-medium px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full flex items-center gap-2 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors">
+              <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              Active: {activeSprint.name}
+            </a>
+          )}
+        </h1>
+
+        <div class="flex items-center gap-2 mt-1">
+          <div class="px-3 py-1 bg-peach-500 text-white rounded-lg text-sm font-medium">
+            Board
+          </div>
+          <a
+            href={`/projects/${projectId}/issues`}
+            class="px-3 py-1 text-ink-500 dark:text-ink-400 hover:bg-surface-100 dark:hover:bg-ink-800 rounded-lg text-sm transition-colors"
+          >
+            List
+          </a>
+          <a
+            href={`/projects/${projectId}/sprints`}
+            class="px-3 py-1 text-ink-500 dark:text-ink-400 hover:bg-surface-100 dark:hover:bg-ink-800 rounded-lg text-sm transition-colors"
+          >
+            Sprints
+          </a>
+        </div>
+        
+      </div>
+    </div>
+
+    <!-- Filters / Actions -->
+    <div class="flex items-start justify-between gap-4 mb-6 px-4">
+      <div class="flex gap-2 items-center flex-wrap">
+        <div class="relative w-48">
+          <input
+            type="text"
+            id="issue-search"
+            placeholder="Search issues..."
+            class="w-full h-10 px-3 pr-8 rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 text-sm focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+            oninput="filterIssues()"
+          />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4 absolute right-3 top-3 text-ink-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+        </div>
+
+        <select
+          id="issue-priority-filter"
+          class="h-10 px-3 rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 text-sm focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+          onchange="filterIssues()"
+        >
+          <option value="">All Priorities</option>
+          <option value="Low">Low</option>
+          <option value="Medium">Medium</option>
+          <option value="High">High</option>
+        </select>
+
+        <select
+          id="issue-label-filter"
+          class="h-10 px-3 rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 text-sm focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+          onchange="filterIssues()"
+        >
+          <option value="">All Labels</option>
+          {
+            uniqueLabels.map((label) => (
+              <option value={label}>{label}</option>
+            ))
+          }
+        </select>
+
+        <div class="h-6 w-px bg-ink-200 dark:bg-ink-700 mx-1"></div>
+
+        <Button
+          variant="secondary"
+          onclick="document.getElementById('create_list_modal').showModal()"
+        >
+          Add list
+        </Button>
+      </div>
+    </div>
+
+    <!-- Board surface -->
+    <div class="flex-1 min-h-0 px-4 pb-6">
+      <div
+        class="h-full min-h-0 rounded-3xl bg-surface-50 dark:bg-ink-900 border border-ink-100/70 dark:border-ink-700/60 shadow-card overflow-hidden"
+      >
+        <div class="h-full min-h-0 overflow-x-auto overflow-y-hidden">
+          <div
+            class="inline-flex min-w-full h-full min-h-0 gap-4 items-stretch p-4 pb-6"
+            id="board-lists"
+          >
+            {
+              (lists as any[])
+                .sort((a, b) => a.order - b.order)
+                .map((list) => {
+                  const listIssues = issuesByList[list.id] || [];
+
+                  return (
+                    <div
+                      class="w-80 flex-shrink-0 flex flex-col h-full min-h-0 list-container select-none"
+                      data-id={list.id}
+                    >
+                      <div
+                        class="rounded-3xl bg-surface-50 dark:bg-ink-900 border border-ink-100/70 dark:border-ink-700/60 shadow-card overflow-hidden flex flex-col h-full min-h-0"
+                      >
+                        <!-- Accent strip -->
+                        <div
+                          class="h-1 w-full"
+                          style={`background-color: ${list.color || "#6b7280"}`}
+                          aria-hidden="true"
+                        />
+
+                        <!-- Header -->
+                        <div
+                          class="px-4 py-3 bg-surface-100 dark:bg-ink-800/60 border-b border-ink-100/70 dark:border-ink-700/60 flex items-center justify-between gap-2 handle cursor-grab active:cursor-grabbing"
+                        >
+                          <div class="min-w-0 flex items-center gap-2">
+                            <span
+                              class="h-2.5 w-2.5 rounded-full flex-none"
+                              style={`background-color: ${list.color || "#6b7280"}`}
+                              aria-hidden="true"
+                            />
+                            <h3 class="text-sm font-semibold text-ink-900 dark:text-ink-100 truncate">
+                              {list.title}
+                            </h3>
+
+                            <span
+                              class="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-surface-200/70 text-ink-600 border border-ink-100/70 dark:bg-ink-800/60 dark:text-ink-300 dark:border-ink-700/60"
+                            >
+                              {listIssues.length}
+                            </span>
+                          </div>
+
+                          <!-- Menu -->
+                          <div class="relative menu-container flex items-center">
+                            <button
+                              type="button"
+                              class="menu-trigger h-9 w-9 grid place-items-center rounded-xl transition-colors text-ink-500 hover:text-ink-900 hover:bg-ink-100 dark:text-ink-400 dark:hover:text-ink-100 dark:hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-peach-300/70"
+                              onclick="toggleMenu(event, this)"
+                              aria-label="List options"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-5 w-5 pointer-events-none"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M10 4.25a1.25 1.25 0 110 2.5 1.25 1.25 0 010-2.5zM10 8.75a1.25 1.25 0 110 2.5 1.25 1.25 0 010-2.5zM10 13.25a1.25 1.25 0 110 2.5 1.25 1.25 0 010-2.5z" />
+                              </svg>
+                            </button>
+
+                            <div
+                              class="menu-dropdown absolute right-0 top-full mt-2 w-52 hidden z-50 overflow-hidden rounded-2xl shadow-card bg-surface-50 dark:bg-ink-800 border border-ink-100 dark:border-ink-700 ring-1 ring-black/5 dark:ring-white/10"
+                            >
+                              <div
+                                class="px-3 py-2 text-[0.65rem] tracking-wider font-semibold uppercase text-ink-500 dark:text-ink-300 border-b border-ink-100/70 dark:border-ink-700/70 bg-surface-100 dark:bg-ink-800/60"
+                              >
+                                List actions
+                              </div>
+
+                              <button
+                                type="button"
+                                onclick={`openEditListModal('${list.id}', '${list.title}', '${list.color || "#6b7280"}')`}
+                                class="w-full text-left px-3 py-2.5 text-sm text-ink-800 dark:text-ink-100 hover:bg-peach-50 dark:hover:bg-ink-700/70 transition-colors flex items-center gap-2"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  class="h-4 w-4 text-ink-400 dark:text-ink-500"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="1.5"
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                  />
+                                </svg>
+                                Edit / Rename
+                              </button>
+
+                              <button
+                                type="button"
+                                onclick={`deleteList('${list.id}')`}
+                                class="w-full text-left px-3 py-2.5 text-sm text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-ink-700/70 transition-colors flex items-center gap-2"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  class="h-4 w-4 opacity-80"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="1.5"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                                Delete list
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Body -->
+                        <div
+                          class="p-3 flex-1 min-h-0 overflow-y-auto list-body"
+                          data-list-id={list.id}
+                        >
+                          {
+                            listIssues.length > 0 ? (
+                              listIssues.map((issue) => (
+                                <div
+                                  class="issue-card bg-surface-50 dark:bg-ink-800 p-3 rounded-xl mb-2 border border-ink-200/50 dark:border-ink-700/50 shadow-sm hover:shadow transition-shadow cursor-pointer group relative"
+                                  data-issue-id={issue._id}
+                                  draggable="true"
+                                  onclick={`openEditIssueModal('${issue._id}')`}
+                                >
+                                  <div class="flex justify-between items-start mb-1 gap-2">
+                                    <span class="text-sm font-medium text-ink-900 dark:text-ink-100 line-clamp-2 leading-snug">
+                                      {issue.title}
+                                    </span>
+                                  </div>
+
+                                  <div class="flex justify-between items-center mt-2 gap-2">
+                                    <div class="flex gap-1 flex-wrap items-center">
+                                      {/* @ts-ignore */}
+                                      {issue.sprintName && (
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-200 dark:bg-ink-700 text-ink-500 dark:text-ink-400 border border-ink-200 dark:border-ink-600 truncate max-w-[80px]" title={issue.sprintName}>
+                                          {/* @ts-ignore */}
+                                          {issue.sprintName}
+                                        </span>
+                                      )}
+                                      {issue.labels &&
+                                        issue.labels.map((label: string) => (
+                                          <span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-200 dark:bg-ink-700 text-ink-600 dark:text-ink-300">
+                                            {label}
+                                          </span>
+                                        ))}
+                                    </div>
+
+                                    <span
+                                      class={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                        issue.priority === "High"
+                                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                                          : issue.priority === "Medium"
+                                            ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+                                            : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                                      }`}
+                                    >
+                                      {issue.priority}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div
+                                class="rounded-2xl border border-dashed border-ink-200/70 dark:border-ink-700/60 bg-surface-100/70 dark:bg-ink-800/40 px-4 py-7 text-center empty-list-state"
+                              >
+                                <p class="text-xs font-medium text-ink-500 dark:text-ink-300">
+                                  No issues yet
+                                </p>
+                                <p class="text-[0.7rem] text-ink-400 dark:text-ink-500 mt-1">
+                                  Create or drag an issue into this list
+                                </p>
+                              </div>
+                            )
+                          }
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })
+            }
+
+            <!-- Add List Card -->
+            <button
+              type="button"
+              onclick="document.getElementById('create_list_modal').showModal()"
+              class="w-80 flex-shrink-0 h-full min-h-0 rounded-3xl border border-dashed border-ink-200/70 dark:border-ink-700/60 bg-surface-50 dark:bg-ink-900 hover:bg-surface-100 dark:hover:bg-ink-800/40 transition-colors flex items-center justify-center"
+              aria-label="Create new list"
+            >
+              <div class="text-center px-6">
+                <div
+                  class="mx-auto mb-3 h-10 w-10 rounded-2xl bg-peach-50 dark:bg-ink-800/60 flex items-center justify-center ring-1 ring-ink-100/70 dark:ring-ink-700/60"
+                >
+                  <span class="text-peach-600 dark:text-peach-300 text-xl leading-none">+</span>
+                </div>
+                <p class="text-sm font-semibold text-ink-900 dark:text-ink-100">
+                  New list
+                </p>
+                <p class="text-xs text-ink-500 dark:text-ink-300 mt-1">
+                  Add a column to your board
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Issue Modal -->
+  <Modal id="create_issue_modal" title="Create New Issue">
+    <form id="create_issue_form" class="space-y-4">
+      <input type="hidden" name="listId" id="create_issue_list_id" />
+      <Input
+        name="title"
+        label="Title"
+        placeholder="What needs to be done?"
+        required
+      />
+
+      <div>
+        <label class="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-1">
+          Priority
+        </label>
+        <select
+          name="priority"
+          class="w-full rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 px-3 py-2 text-sm text-ink-900 dark:text-ink-100 focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+        >
+          <option value="Low">Low</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="High">High</option>
+        </select>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-4">
+        <Button
+          variant="secondary"
+          type="button"
+          onclick="document.getElementById('create_issue_modal').close()"
+        >
+          Cancel
+        </Button>
+        <Button type="submit">Create Issue</Button>
+      </div>
+    </form>
+  </Modal>
+
+  <IssueEditModal />
+  <DeleteIssueDialog />
+
+  <!-- Create List Modal -->
+  <Modal id="create_list_modal" title="Create New List">
+    <form id="create_list_form" class="space-y-6">
+      <Input
+        name="title"
+        label="List Title"
+        placeholder="e.g. Testing, Blocked"
+        required
+      />
+
+      <div>
+        <label class="text-sm font-medium text-ink-600 dark:text-ink-300 ml-1 mb-2 block">
+          List color
+        </label>
+
+        <div class="flex flex-wrap gap-2">
+          {colorOptions.map((c, i) => (
+            <label class="cursor-pointer">
+              <input
+                type="radio"
+                name="color"
+                value={c}
+                class="peer sr-only"
+                checked={i === 0 ? true : undefined}
+              />
+              <div
+                class="w-7 h-7 rounded-full ring-1 ring-ink-200/70 dark:ring-ink-700/60 peer-checked:ring-2 peer-checked:ring-peach-300/70 peer-checked:ring-offset-2 peer-checked:ring-offset-surface-50 dark:peer-checked:ring-offset-ink-900 transition"
+                style={`background-color: ${c}`}
+                aria-label={`Color ${c}`}
+              ></div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2">
+        <Button
+          variant="ghost"
+          type="button"
+          onclick="document.getElementById('create_list_modal').close()"
+        >
+          Cancel
+        </Button>
+        <Button type="submit">Create list</Button>
+      </div>
+    </form>
+  </Modal>
+
+  <!-- Edit List Modal -->
+  <Modal id="edit_list_modal" title="Edit List">
+    <form id="edit_list_form" class="space-y-6">
+      <input type="hidden" name="listId" id="edit_list_id" />
+
+      <Input
+        name="title"
+        id="edit_list_title"
+        label="List Title"
+        required
+      />
+
+      <div>
+        <label class="text-sm font-medium text-ink-600 dark:text-ink-300 ml-1 mb-2 block">
+          List color
+        </label>
+
+        <div class="flex flex-wrap gap-2">
+          {colorOptions.map((c) => (
+            <label class="cursor-pointer">
+              <input type="radio" name="color" value={c} class="peer sr-only" />
+              <div
+                class="w-7 h-7 rounded-full ring-1 ring-ink-200/70 dark:ring-ink-700/60 peer-checked:ring-2 peer-checked:ring-peach-300/70 peer-checked:ring-offset-2 peer-checked:ring-offset-surface-50 dark:peer-checked:ring-offset-ink-900 transition"
+                style={`background-color: ${c}`}
+                aria-label={`Color ${c}`}
+              ></div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2">
+        <Button
+          variant="ghost"
+          type="button"
+          onclick="document.getElementById('edit_list_modal').close()"
+        >
+          Cancel
+        </Button>
+        <Button type="submit">Save changes</Button>
+      </div>
+    </form>
+  </Modal>
+</AppLayout>
+
+<script define:vars={{ projectId: projectId, issues }}>
+  window.projectId = projectId;
+  window.issues = issues;
+
+  // List Creation
+  const createForm = document.getElementById("create_list_form");
+  createForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/lists`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        window.toast.success("List created successfully!");
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        window.toast.error(errorData.error || "Failed to create list");
+      }
+    } catch (err) {
+      console.error(err);
+      window.toast.error("Error creating list");
+    }
+  });
+
+  // Edit List
+  const editForm = document.getElementById("edit_list_form");
+  editForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    const listId = data.listId;
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/lists/${listId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        window.toast.success("List updated");
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        window.toast.error(errorData.error || "Failed to update list");
+      }
+    } catch (err) {
+      console.error(err);
+      window.toast.error("Error updating list");
+    }
+  });
+
+  window.openEditListModal = (id, title, color) => {
+    closeAllMenus();
+
+    const modal = document.getElementById("edit_list_modal");
+    const form = document.getElementById("edit_list_form");
+    const idInput = document.getElementById("edit_list_id");
+    const titleInput = document.getElementById("edit_list_title");
+
+    if (!modal || !form || !idInput || !titleInput) return;
+
+    idInput.value = id;
+    titleInput.value = title;
+
+    const colorRadio = form.querySelector(`input[name="color"][value="${color}"]`);
+    if (colorRadio) colorRadio.checked = true;
+
+    modal.showModal();
+  };
+
+  // Menu Handling
+  window.toggleMenu = (e, btn) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const dropdown = btn.nextElementSibling;
+    if (!dropdown) return;
+
+    const willOpen = dropdown.classList.contains("hidden");
+    closeAllMenus();
+    if (willOpen) dropdown.classList.remove("hidden");
+  };
+
+  function closeAllMenus() {
+    document.querySelectorAll(".menu-dropdown").forEach((el) => {
+      el.classList.add("hidden");
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".menu-container")) {
+      closeAllMenus();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeAllMenus();
+    }
+  });
+
+  // Delete List
+  window.deleteList = async (listId) => {
+    if (!confirm("Are you sure you want to delete this list?")) return;
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/lists/${listId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        window.toast.success("List deleted");
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        window.toast.error(errorData.error || "Failed to delete list");
+      }
+    } catch (err) {
+      console.error(err);
+      window.toast.error("Error deleting list");
+    }
+  };
+
+  // Drag & Drop Lists
+  const boardContainer = document.getElementById("board-lists");
+  let draggedList = null;
+
+  document.addEventListener("mousedown", (e) => {
+    const target = e.target;
+    const listEl = target.closest(".list-container");
+    if (!listEl) return;
+
+    const handle = target.closest(".handle");
+    if (handle) {
+      listEl.setAttribute("draggable", "true");
+    } else {
+      listEl.setAttribute("draggable", "false");
+    }
+  });
+
+  if (boardContainer) {
+    boardContainer.addEventListener("dragstart", (e) => {
+      const target = e.target;
+      if (!target.classList || !target.classList.contains("list-container")) return;
+
+      draggedList = target;
+      draggedList.classList.add("opacity-50");
+
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", draggedList.dataset.id || "");
+      }
+    });
+
+    boardContainer.addEventListener("dragend", async () => {
+      if (!draggedList) return;
+
+      draggedList.classList.remove("opacity-50");
+      draggedList.removeAttribute("draggable");
+
+      const listIds = Array.from(
+        boardContainer.querySelectorAll(".list-container")
+      ).map((el) => el.getAttribute("data-id"));
+
+      try {
+        await fetch(`/api/projects/${projectId}/lists`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listIds }),
+        });
+      } catch (err) {
+        console.error("Failed to save order", err);
+        window.toast.error("Failed to save order");
+      }
+
+      draggedList = null;
+    });
+
+    boardContainer.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (!draggedList) return;
+
+      const afterElement = getDragAfterElement(boardContainer, e.clientX);
+      const newListBtn = boardContainer.querySelector("button[aria-label='Create new list']");
+
+      if (afterElement == null) {
+        if (newListBtn) {
+          boardContainer.insertBefore(draggedList, newListBtn);
+        } else {
+          boardContainer.appendChild(draggedList);
+        }
+      } else {
+        boardContainer.insertBefore(draggedList, afterElement);
+      }
+    });
+  }
+
+  function getDragAfterElement(container, x) {
+    const draggableElements = [
+      ...container.querySelectorAll(".list-container:not(.opacity-50)"),
+    ];
+
+    return draggableElements.reduce(
+      (closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        }
+        return closest;
+      },
+      { offset: Number.NEGATIVE_INFINITY, element: null }
+    ).element;
+  }
+</script>
+
+<script>
+  // Create Issue
+  window.openCreateIssueModal = function (listId: string) {
+    var input = document.getElementById("create_issue_list_id") as HTMLInputElement | null;
+    var modal = document.getElementById("create_issue_modal") as HTMLDialogElement | null;
+    if (input) input.value = listId;
+    if (modal) modal.showModal();
+  };
+
+  var createIssueForm = document.getElementById("create_issue_form");
+  createIssueForm?.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var target = e.target as HTMLFormElement;
+    var formData = new FormData(target);
+    var data = Object.fromEntries(formData);
+
+    try {
+      var res = await fetch("/api/projects/" + (window as any).projectId + "/issues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        window.toast.success("Issue created");
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        window.toast.error(errorData.error || "Failed to create issue");
+      }
+    } catch (err) {
+      console.error(err);
+      window.toast.error("Error creating issue");
+    }
+  });
+
+  // Issue Drag and Drop
+  var issueContainers = document.querySelectorAll(".list-body");
+  var draggedIssue: HTMLElement | null = null;
+
+  issueContainers.forEach(function (container) {
+    container.addEventListener("dragstart", function (e) {
+      var target = e.target as HTMLElement;
+      if (!target.classList.contains("issue-card")) return;
+
+      e.stopPropagation();
+      draggedIssue = target;
+      draggedIssue.classList.add("opacity-50");
+
+      var dragEvent = e as DragEvent;
+      if (dragEvent.dataTransfer) {
+        dragEvent.dataTransfer.effectAllowed = "move";
+        dragEvent.dataTransfer.setData("text/plain", draggedIssue.dataset.issueId || "");
+      }
+    });
+
+    container.addEventListener("dragend", async function (e) {
+      if (!draggedIssue) return;
+
+      e.stopPropagation();
+      draggedIssue.classList.remove("opacity-50");
+
+      var issueId = draggedIssue.dataset.issueId;
+      var closestListBody = draggedIssue.closest(".list-body") as HTMLElement | null;
+      if (!closestListBody) {
+        draggedIssue = null;
+        return;
+      }
+
+      var newListId = closestListBody.dataset.listId;
+      var siblings = Array.from(closestListBody.children).filter(function (c) {
+        var el = c as HTMLElement;
+        return el.classList && el.classList.contains("issue-card");
+      });
+      var newIndex = siblings.indexOf(draggedIssue);
+
+      try {
+        await fetch("/api/projects/" + (window as any).projectId + "/issues/" + issueId, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listId: newListId,
+            order: newIndex < 0 ? 0 : newIndex,
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to move issue", err);
+        window.toast.error("Failed to move issue");
+      }
+
+      draggedIssue = null;
+    });
+
+    container.addEventListener("dragover", function (e) {
+      if (!draggedIssue) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      
+      var dragEvent = e as DragEvent;
+      var afterElement = getDragAfterIssue(container as HTMLElement, dragEvent.clientY);
+      var emptyState = container.querySelector(".empty-list-state");
+
+      if (emptyState) {
+        emptyState.remove();
+      }
+
+      if (afterElement == null) {
+        container.appendChild(draggedIssue);
+      } else {
+        container.insertBefore(draggedIssue, afterElement);
+      }
+    });
+  });
+
+  function getDragAfterIssue(container: HTMLElement, y: number) {
+    var draggableElements = Array.from(
+      container.querySelectorAll(".issue-card:not(.opacity-50)")
+    ) as HTMLElement[];
+
+    return draggableElements.reduce(
+      function (closest, child) {
+        var box = child.getBoundingClientRect();
+        var offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        }
+        return closest;
+      },
+      { offset: Number.NEGATIVE_INFINITY, element: null as HTMLElement | null }
+    ).element;
+  }
+</script>
+
+<script>
+  window.filterIssues = function () {
+    var searchInput = document.getElementById("issue-search") as HTMLInputElement | null;
+    var priorityInput = document.getElementById("issue-priority-filter") as HTMLSelectElement | null;
+    var labelInput = document.getElementById("issue-label-filter") as HTMLSelectElement | null;
+    
+    if (!searchInput || !priorityInput || !labelInput) return;
+
+    var search = searchInput.value.toLowerCase();
+    var priority = priorityInput.value;
+    var label = labelInput.value;
+
+    var cards = document.querySelectorAll(".issue-card");
+
+    cards.forEach(function (card) {
+      var element = card as HTMLElement;
+      var issueId = element.dataset.issueId;
+      var issue = ((window as any).issues || []).find(function (i: any) {
+        return i._id === issueId;
+      });
+
+      if (!issue) return;
+
+      var title = (issue.title || "").toLowerCase();
+      var description = (issue.description || "").toLowerCase();
+
+      var matchesSearch =
+        title.includes(search) || description.includes(search);
+      var matchesPriority = !priority || issue.priority === priority;
+      var matchesLabel = !label || (issue.labels && issue.labels.includes(label));
+
+      if (matchesSearch && matchesPriority && matchesLabel) {
+        element.classList.remove("hidden");
+      } else {
+        element.classList.add("hidden");
+      }
+    });
+  };
+</script>

@@ -1,0 +1,23 @@
+---
+import { ProjectService } from "../lib/services/project.service";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+// Attempt to find the most relevant project for the user
+// Ideally this would be the "last accessed" or "starred" project
+// For now, we'll just grab the first one
+const projects = await ProjectService.getAllProjects(
+  false,
+  user._id!.toString(),
+);
+
+if (projects && projects.length > 0) {
+  return Astro.redirect(`/projects/${projects[0]._id}`);
+}
+
+// Fallback if no projects exist
+return Astro.redirect("/projects");
+---

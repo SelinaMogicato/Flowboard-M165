@@ -1,0 +1,140 @@
+
+---
+import AppLayout from "../../../../layouts/AppLayout.astro";
+import { SprintService } from "../../../../lib/services/sprint.service";
+import Card from "../../../../components/ui/Card.astro";
+
+const { projectId, sprintId } = Astro.params;
+let overview: any;
+
+if (sprintId) {
+  try {
+    overview = await SprintService.getSprintOverview(sprintId);
+  } catch (e) {
+    console.error(e);
+    return Astro.redirect("/404");
+  }
+}
+
+const { sprint, issues, stats } = overview;
+---
+
+<AppLayout title={`${sprint.name} - Overview`}>
+  <div class="max-w-6xl mx-auto w-full px-4">
+    <!-- Header -->
+    <div class="mb-8 border-b border-ink-200 dark:border-ink-700 pb-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+        <div>
+          <div class="flex items-center gap-3">
+             <h1 class="text-3xl font-bold text-ink-900 dark:text-ink-50">{sprint.name}</h1>
+             <span class={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                sprint.status === 'active' ? 'bg-green-100 text-green-700' : 
+                sprint.status === 'completed' ? 'bg-ink-100 text-ink-700' : 'bg-blue-100 text-blue-700'
+             }`}>
+                {sprint.status}
+             </span>
+          </div>
+          <p class="text-ink-500 dark:text-ink-400 mt-2 max-w-2xl">{sprint.goal || 'No goal set for this sprint.'}</p>
+        </div>
+        <div class="flex gap-2">
+            <a href={`/projects/${projectId}/sprints`} class="px-4 py-2 border border-ink-200 dark:border-ink-700 rounded-xl text-ink-600 dark:text-ink-300 hover:bg-surface-50 dark:hover:bg-ink-800 transition-colors">
+                Back to List
+            </a>
+            <a href={`/projects/${projectId}`} class="px-4 py-2 bg-peach-500 hover:bg-peach-600 text-white rounded-xl shadow-lg shadow-peach-500/20 transition-colors">
+                Go to Board
+            </a>
+        </div>
+      </div>
+      
+      <!-- Progress Bar -->
+      <div class="bg-surface-100 dark:bg-ink-800 rounded-full h-4 overflow-hidden relative w-full max-w-md mt-2">
+        <div 
+            class="bg-peach-500 h-full rounded-full transition-all duration-1000 ease-out"
+            style={`width: ${stats.progressPercent}%`}
+        ></div>
+      </div>
+      <div class="flex justify-between max-w-md text-xs text-ink-500 mt-2 font-medium">
+         <span>{stats.completedIssues} Completed</span>
+         <span>{stats.progressPercent}% Done</span>
+         <span>{stats.openIssues} Remaining</span>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+       <Card class="p-6 text-center border-l-4 border-l-blue-500">
+           <h3 class="text-ink-500 dark:text-ink-400 text-sm font-medium uppercase tracking-wider mb-1">Total Issues</h3>
+           <p class="text-3xl font-bold text-ink-900 dark:text-ink-50">{stats.totalIssues}</p>
+       </Card>
+       <Card class="p-6 text-center border-l-4 border-l-green-500">
+           <h3 class="text-ink-500 dark:text-ink-400 text-sm font-medium uppercase tracking-wider mb-1">Completed</h3>
+           <p class="text-3xl font-bold text-green-600 dark:text-green-400">{stats.completedIssues}</p>
+       </Card>
+       <Card class="p-6 text-center border-l-4 border-l-peach-500">
+           <h3 class="text-ink-500 dark:text-ink-400 text-sm font-medium uppercase tracking-wider mb-1">In Progress</h3>
+           <p class="text-3xl font-bold text-peach-600 dark:text-peach-400">{stats.openIssues}</p>
+       </Card>
+    </div>
+
+    <!-- Issue List -->
+    <div class="bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 rounded-2xl overflow-hidden shadow-sm">
+        <div class="px-6 py-4 border-b border-ink-200 dark:border-ink-700 bg-surface-100/50 dark:bg-ink-800/50">
+            <h3 class="font-bold text-ink-900 dark:text-ink-100">Sprint Backlog</h3>
+        </div>
+        {issues.length > 0 ? (
+            <ul class="divide-y divide-ink-100 dark:divide-ink-800">
+                {issues.map((issue: any) => (
+                    <li class="p-4 hover:bg-surface-100 dark:hover:bg-ink-800/50 transition-colors flex items-center justify-between group">
+                        <div class="flex items-center gap-3">
+                            <span class={`w-2 h-2 rounded-full ${['High'].includes(issue.priority) ? 'bg-red-500' : ['Medium'].includes(issue.priority) ? 'bg-yellow-500' : 'bg-blue-500'}`}></span>
+                            <div>
+                                <p class="text-ink-900 dark:text-ink-100 font-medium">{issue.title}</p>
+                                <p class="text-xs text-ink-500 dark:text-ink-400">
+                                    #{issue._id.toString().slice(-4)} &middot; {issue.priority}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            {issue.assignee ? (
+                                <span class="text-xs bg-surface-200 dark:bg-ink-700 px-2 py-1 rounded text-ink-600 dark:text-ink-300">
+                                    {issue.assignee}
+                                </span>
+                            ) : (
+                                <span class="text-xs text-ink-400 italic">Unassigned</span>
+                            )}
+                            
+                            <!-- Remove from sprint button -->
+                            <button 
+                                onclick={`removeFromSprint('${issue._id}')`}
+                                class="p-2 text-ink-400 hover:text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Remove from Sprint"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </li>
+                ))}
+            </ul>
+        ) : (
+            <div class="p-12 text-center text-ink-500 dark:text-ink-400 italic">
+                No issues assigned to this sprint yet.
+            </div>
+        )}
+    </div>
+  </div>
+</AppLayout>
+
+<script>
+    window.removeFromSprint = async (issueId: string) => {
+        if(!confirm('Remove this issue from the sprint?')) return;
+        try {
+            const res = await fetch(`/api/issues/${issueId}/sprint`, { method: 'DELETE' });
+            if (res.ok) window.location.reload();
+            else alert('Failed to remove issue');
+        } catch (e) {
+            console.error(e);
+        }
+    };
+</script>

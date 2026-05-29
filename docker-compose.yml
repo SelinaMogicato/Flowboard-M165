@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:7
+    container_name: flowboard-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: M7r9UsUadPwXYZorpWCG3GY4crtBME5KmM8GHqV46PTwtH2LyYikug3aNgtG9MJQED19bmJDtXQfccbbTJ8R
+    volumes:
+      - flowboard-mongo-data:/data/db
+
+volumes:
+  flowboard-mongo-data:

@@ -1,0 +1,29 @@
+---
+// Explanation: A reusable Input component for forms.
+// It includes the label and the input field itself, with consistent styling for focus states and validation.
+
+interface Props extends astroHTML.JSX.InputHTMLAttributes {
+  label?: string;
+  name: string; // Ensure name is required
+}
+
+const { label, class: className, id, ...rest } = Astro.props;
+---
+
+<div class:list={["flex flex-col gap-2", className]}>
+  {
+    label && (
+      <label
+        for={id || rest.name}
+        class="text-sm font-medium text-ink-500 ml-1"
+      >
+        {label}
+      </label>
+    )
+  }
+  <input
+    id={id || rest.name}
+    class="w-full px-5 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-surface-50 dark:bg-ink-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-peach-500/50 focus:border-peach-500 transition-all duration-200 placeholder:text-ink-300 dark:placeholder:text-ink-500"
+    {...rest}
+  />
+</div>

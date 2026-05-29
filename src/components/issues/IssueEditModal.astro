@@ -1,0 +1,304 @@
+---
+import Modal from "../ui/Modal.astro";
+import Input from "../ui/Input.astro";
+import Button from "../ui/Button.astro";
+
+interface Props {
+  id?: string;
+}
+
+const { id = "edit_issue_modal" } = Astro.props;
+---
+
+<Modal id={id} title="Edit Issue">
+  <form id="edit_issue_form" class="space-y-4">
+    <input type="hidden" name="issueId" id="edit_issue_id" />
+
+    <Input name="title" label="Title" id="edit_issue_title" required />
+
+    <div>
+      <label
+        class="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-1"
+        >Description</label
+      >
+      <textarea
+        name="description"
+        id="edit_issue_description"
+        rows="3"
+        class="w-full rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 px-3 py-2 text-sm text-ink-900 dark:text-ink-100 focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+      ></textarea>
+    </div>
+
+    <div>
+      <label
+        class="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-1"
+        >Priority</label
+      >
+      <select
+        name="priority"
+        id="edit_issue_priority"
+        class="w-full rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 px-3 py-2 text-sm text-ink-900 dark:text-ink-100 focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+      >
+        <option value="Low">Low</option>
+        <option value="Medium">Medium</option>
+        <option value="High">High</option>
+      </select>
+    </div>
+
+    <div>
+      <label
+        class="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-1"
+        >Labels (comma separated)</label
+      >
+      <input
+        type="text"
+        name="labels"
+        id="edit_issue_labels"
+        placeholder="bug, frontend, design"
+        class="w-full rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 px-3 py-2 text-sm text-ink-900 dark:text-ink-100 focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+      />
+    </div>
+
+    <div>
+      <label
+        class="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-1"
+        >Sprint</label
+      >
+      <select
+        name="sprintId"
+        id="edit_issue_sprint"
+        class="w-full rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 px-3 py-2 text-sm text-ink-900 dark:text-ink-100 focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+      >
+        <option value="">No Sprint</option>
+      </select>
+    </div>
+
+    <div
+      class="flex justify-between items-right pt-4 border-t border-ink-100 dark:border-ink-700 mt-4"
+    >
+      <div class="flex gap-2 items-right">
+        <span id="edit_issue_feedback" class="text-sm font-medium hidden mr-2"
+        ></span>
+        <Button
+          variant="secondary"
+          onclick={`document.getElementById('${id}').close()`}>Cancel</Button
+        >
+        <Button type="submit">Save Changes</Button>
+      </div>
+    </div>
+  </form>
+</Modal>
+
+<script is:inline>
+  {
+    const form = document.getElementById("edit_issue_form");
+    const modal = document.getElementById("edit_issue_modal"); // Matches default ID
+    const feedback = document.getElementById("edit_issue_feedback");
+    const deleteBtn = document.getElementById("btn_delete_issue");
+    const sprintSelect = document.getElementById("edit_issue_sprint");
+
+    window.openEditIssueModal = async (issueId) => {
+      // Assume issues are available globally or we fetch
+      const issue = window.issues
+        ? window.issues.find((i) => i._id === issueId)
+        : null;
+      if (!issue) return; // Or fetch individual
+
+      document.getElementById("edit_issue_id").value = issue._id;
+      document.getElementById("edit_issue_title").value = issue.title;
+      document.getElementById("edit_issue_description").value =
+        issue.description || "";
+      document.getElementById("edit_issue_priority").value = issue.priority;
+      document.getElementById("edit_issue_labels").value = issue.labels
+        ? issue.labels.join(", ")
+        : "";
+
+      // Load Sprints
+      sprintSelect.innerHTML = '<option value="">No Sprint</option>';
+      if (issue.projectId) {
+        try {
+          // Only fetch if not already populated or always fetch? Always fetch to get latest status.
+          const res = await fetch(`/api/projects/${issue.projectId}/sprints`);
+          if (res.ok) {
+            const sprints = await res.json();
+            sprints.forEach((s) => {
+              const opt = document.createElement("option");
+              opt.value = s._id;
+              opt.textContent = `${s.name} (${s.status})`;
+              sprintSelect.appendChild(opt);
+            });
+          }
+        } catch (e) {
+          console.error("Failed to load sprints", e);
+        }
+      }
+      sprintSelect.value = issue.sprintId || "";
+
+      // Check if modal instance exists or just use getElementById
+      // The Modal component uses native <dialog>
+      modal.showModal();
+
+      // Clear previous feedback
+      feedback.textContent = "";
+      feedback.className = "text-sm font-medium hidden mr-2";
+    };
+
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const issueId = formData.get("issueId");
+
+      // Convert labels to array
+      const labelsStr = formData.get("labels");
+      const labels = labelsStr
+        ? labelsStr
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
+
+      const data = {
+        title: formData.get("title"),
+        description: formData.get("description"),
+        priority: formData.get("priority"),
+        labels: labels,
+      };
+
+      // UI Feedback: Saving
+      feedback.textContent = "Saving...";
+      feedback.className = "text-sm font-medium text-ink-500 mr-2";
+      feedback.classList.remove("hidden");
+
+      try {
+        // 1. Update basic fields
+        const res = await fetch(`/api/issues/${issueId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        // 2. Update Sprint if changed
+        const newSprintId = formData.get("sprintId");
+        // Get old sprint from window.issues
+        const currentIssue = window.issues
+          ? window.issues.find((i) => i._id === issueId)
+          : null;
+        const oldSprintId = currentIssue ? currentIssue.sprintId || "" : "";
+
+        if (newSprintId !== oldSprintId) {
+          if (newSprintId) {
+            await fetch(`/api/issues/${issueId}/sprint`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sprintId: newSprintId }),
+            });
+          } else {
+            await fetch(`/api/issues/${issueId}/sprint`, { method: "DELETE" });
+          }
+        }
+
+        if (res.ok) {
+          const updatedIssue = await res.json();
+          // Ideally fetch fresh issue to get everything synced including sprint
+          updatedIssue.sprintId = newSprintId || null; // Optimistic update for local state
+
+          // Update local data if window.issues exists
+          if (window.issues) {
+            const idx = window.issues.findIndex((i) => i._id === issueId);
+            if (idx !== -1) window.issues[idx] = updatedIssue;
+          }
+
+          // Show success
+          feedback.textContent = "Saved";
+          feedback.className =
+            "text-sm font-medium text-green-600 dark:text-green-400 mr-2";
+
+          // Close after a short delay or just let the user close
+          // Better: Update UI immediately
+          updateIssueCardInDOM(updatedIssue);
+
+          setTimeout(() => {
+            modal.close();
+            feedback.classList.add("hidden");
+          }, 1000);
+        } else {
+          const err = await res.json();
+          feedback.textContent = err.error || "Failed to save";
+          feedback.className = "text-sm font-medium text-red-600 mr-2";
+        }
+      } catch (err) {
+        console.error(err);
+        feedback.textContent = "Error saving";
+        feedback.className = "text-sm font-medium text-red-600 mr-2";
+      }
+    });
+
+    deleteBtn?.addEventListener("click", () => {
+      const issueId = document.getElementById("edit_issue_id").value;
+      if (window.openDeleteIssueDialog) {
+        window.openDeleteIssueDialog(issueId);
+      } else {
+        // Fallback if dialog not loaded
+        if (confirm("Delete this issue?")) {
+          // ...
+        }
+      }
+    });
+
+    function updateIssueCardInDOM(issue) {
+      // Find existing card
+      const card = document.querySelector(
+        `.issue-card[data-issue-id="${issue._id}"]`,
+      );
+      if (!card) {
+        // Fallback for views that don't match the board card structure (e.g. list view)
+        window.location.reload();
+        return;
+      }
+
+      // Update Title
+      const titleEl = card.querySelector(".issue-title"); // Need to ensure class exists in render
+      if (titleEl) titleEl.textContent = issue.title;
+      else {
+        // Fallback to structure: first div > span
+        const span = card.querySelector("div.flex > span");
+        if (span) span.textContent = issue.title;
+      }
+
+      // Update Priority Badge
+      const badgesContainer = card.querySelector(".issue-badges"); // We need to add these classes in the main file
+      // For now, let's just reload the page as per prompt "Preferred: optimistic UI if easy OR re-fetch issue list"
+      // Since DOM updating requires matching exact structure, relying on reload is safer unless I touch the card structure.
+      // But prompt said "issue UI must update immediately without requiring full page reload".
+      // So I will try to update basic fields.
+
+      // Update tags
+      // Clear existing labels
+      const labelsContainer = card.querySelector(".flex.gap-1");
+      if (labelsContainer) {
+        labelsContainer.innerHTML = "";
+        (issue.labels || []).forEach((label) => {
+          const span = document.createElement("span");
+          span.className =
+            "text-[10px] px-1.5 py-0.5 rounded bg-surface-200 dark:bg-ink-700 text-ink-600 dark:text-ink-300";
+          span.textContent = label;
+          labelsContainer.appendChild(span);
+        });
+      }
+
+      // Update Priority Badge
+      const priorityEl = card.querySelector("div.mt-2 > span:last-child");
+      if (priorityEl) {
+        priorityEl.textContent = issue.priority;
+        // Reset classes
+        priorityEl.className = `text-[10px] px-1.5 py-0.5 rounded font-medium ${
+          issue.priority === "High"
+            ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+            : issue.priority === "Medium"
+              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+        }`;
+      }
+    }
+  }
+</script>

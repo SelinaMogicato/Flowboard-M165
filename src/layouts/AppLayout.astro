@@ -1,0 +1,52 @@
+---
+// Explanation: The main layout wrapper for the authenticated part of the application.
+// It assumes the user is logged in (redirecting if not) and wraps content in the AppShell.
+// It serves as the base template for all secure pages like Dashboard, Projects, etc.
+
+import AppShell from "../components/layout/AppShell.astro";
+import Toast from "../components/ui/Toast.astro";
+import { getSessionFromRequest } from "../lib/auth/session";
+import "../styles/global.css";
+
+// Double check session here for type safety in template
+// Even if middleware runs, this ensures 'user' is available for the AppShell
+const result = await getSessionFromRequest(Astro.cookies);
+
+if (!result) {
+  return Astro.redirect("/login");
+}
+
+const { user } = result;
+Astro.locals.user = user;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+    <title>FlowBoard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body
+    class="bg-surface-100 dark:bg-ink-900 text-ink-900 dark:text-ink-100 font-sans antialiased selection:bg-peach-200 selection:text-peach-900 transition-colors duration-200"
+  >
+    <Toast />
+    <AppShell user={user}>
+      <slot />
+    </AppShell>
+  </body>
+</html>
+
+<style is:global>
+  body {
+    font-family: "Figtree", system-ui, sans-serif;
+  }
+</style>

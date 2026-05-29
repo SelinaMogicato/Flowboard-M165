@@ -1,0 +1,42 @@
+---
+// Explanation: A reusable Button component that supports different variants (primary, secondary, ghost).
+// It wraps the standard HTML button element with Tailwind classes for consistent styling across the app.
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends HTMLAttributes<"button"> {
+  variant?: "primary" | "secondary" | "ghost";
+  type?: "button" | "submit" | "reset";
+  class?: string;
+  // id, type, etc are handled by extended props
+}
+
+const {
+  variant = "primary",
+  type = "button",
+  class: className,
+  id,
+  ...rest
+} = Astro.props;
+
+const variants = {
+  primary:
+    "bg-peach-500 text-white hover:bg-peach-600 shadow-md transform active:scale-95",
+  secondary:
+    "bg-white text-ink-900 border border-ink-100 dark:border-ink-700 dark:bg-ink-800 dark:text-white hover:bg-ink-100 dark:hover:bg-ink-700 shadow-sm",
+  ghost:
+    "bg-transparent text-ink-500 hover:text-ink-900 hover:bg-ink-50 dark:hover:bg-ink-800",
+};
+---
+
+<button
+  {...rest}
+  id={id}
+  type={type}
+  class:list={[
+    "px-6 py-3 rounded-2xl font-medium transition-all duration-200 flex items-center justify-center gap-2",
+    variants[variant],
+    className,
+  ]}
+>
+  <slot />
+</button>

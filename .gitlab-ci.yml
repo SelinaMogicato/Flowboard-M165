@@ -1,0 +1,15 @@
+stages:
+  - mirror
+
+mirror_to_github:
+  stage: mirror
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - git --version
+    - git config --global user.email "ci-mirror@flowboard.local"
+    - git config --global user.name "GitLab Mirror Bot"
+  script:
+    - git remote remove github 2>/dev/null || true
+    - git remote add github https://Selimo100:${GITHUB_TOKEN}@github.com/Selimo100/FlowBoard.git
+    - git push github HEAD:refs/heads/main

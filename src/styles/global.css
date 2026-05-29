@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@config "../../tailwind.config.cjs";
+
+/* Font is loaded from Google Fonts in the Layout files */

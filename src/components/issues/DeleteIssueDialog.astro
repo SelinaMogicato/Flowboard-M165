@@ -1,0 +1,100 @@
+---
+import Modal from "../ui/Modal.astro";
+import Button from "../ui/Button.astro";
+
+interface Props {
+  id?: string;
+}
+
+const { id = "delete_issue_modal" } = Astro.props;
+---
+
+<Modal id={id} title="Delete Issue?">
+  <div class="space-y-4">
+    <p class="text-ink-600 dark:text-ink-300">
+      Are you sure you want to delete this issue? This action cannot be undone.
+    </p>
+
+    <input type="hidden" id="delete_issue_id" />
+
+    <div class="flex justify-end gap-3 pt-2">
+      <Button
+        variant="secondary"
+        onclick={`document.getElementById('${id}').close()`}>Cancel</Button
+      >
+      <Button
+        variant="primary"
+        class="!bg-red-600 hover:!bg-red-700 !text-white"
+        id="confirm_delete_issue">Delete</Button
+      >
+    </div>
+  </div>
+</Modal>
+
+<script is:inline>
+  {
+    const modal = document.getElementById("delete_issue_modal");
+    const confirmBtn = document.getElementById("confirm_delete_issue");
+    const inputId = document.getElementById("delete_issue_id");
+
+    // @ts-ignore
+    window.openDeleteIssueDialog = (issueId) => {
+      // @ts-ignore
+      inputId.value = issueId;
+      // @ts-ignore
+      modal.showModal();
+      // Also close the edit modal if it's open
+      const editModal = document.getElementById("edit_issue_modal");
+      // @ts-ignore
+      if (editModal && editModal.open) editModal.close();
+    };
+
+    confirmBtn?.addEventListener("click", async () => {
+      // @ts-ignore
+      const issueId = inputId.value;
+      if (!issueId) return;
+
+      // Visual feedback on button
+      confirmBtn.textContent = "Deleting...";
+      // @ts-ignore
+      confirmBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/issues/${issueId}`, {
+          method: "DELETE",
+        });
+
+        if (res.ok) {
+          // Remove from DOM immediately
+          const card = document.querySelector(
+            `.issue-card[data-issue-id="${issueId}"]`,
+          );
+          if (card) {
+            card.remove();
+          } else {
+            window.location.reload();
+          }
+
+          // Also update window.issues
+          // @ts-ignore
+          if (window.issues) {
+            // @ts-ignore
+            window.issues = window.issues.filter((i) => i._id !== issueId);
+          }
+
+          // @ts-ignore
+          modal.close();
+        } else {
+          alert("Failed to delete issue");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error deleting issue");
+      } finally {
+        confirmBtn.textContent = "Delete";
+        // @ts-ignore
+        confirmBtn.disabled = false;
+      }
+    });
+  }
+</script>

@@ -1,0 +1,338 @@
+---
+import AppLayout from "../../../../layouts/AppLayout.astro";
+import { ProjectService } from "../../../../lib/services/project.service";
+import { IssueService } from "../../../../lib/services/issue.service";
+import { SprintService } from "../../../../lib/services/sprint.service";
+import IssueEditModal from "../../../../components/issues/IssueEditModal.astro";
+import DeleteIssueDialog from "../../../../components/issues/DeleteIssueDialog.astro";
+import type { Issue } from "../../../../lib/repositories/issue.repo";
+
+const { projectId } = Astro.params;
+let project: any;
+let issues: any[] = [];
+let uniqueLabels: string[] = [];
+let openCount = 0;
+let closedCount = 0;
+let activeSprint: any = null;
+
+if (projectId && Astro.locals.user) {
+  try {
+    project = await ProjectService.getProjectById(projectId, Astro.locals.user._id?.toString());
+    if (!project) return Astro.redirect('/projects');
+    issues = await IssueService.getIssuesByProject(projectId);
+    const sprints = await SprintService.getAllSprints(projectId);
+    
+    activeSprint = sprints.find((s: any) => s.status === 'active');
+    
+    // Determine status based on list name
+    // Assuming "Completed" list means Closed, everything else Open
+    const closedListIds = project.lists
+      .filter((l: any) => l.title === 'Completed' || l.title === 'Done')
+      .map((l: any) => l.id);
+      
+    issues = issues.map((issue: any) => ({
+      ...issue,
+      sprintName: issue.sprintId ? sprints.find((s: any) => s._id.toString() === issue.sprintId.toString())?.name || null : null,
+      status: closedListIds.includes(issue.listId) ? 'closed' : 'open',
+      listName: project.lists.find((l: any) => l.id === issue.listId)?.title || 'Unknown'
+    }));
+
+    uniqueLabels = Array.from(new Set(issues.flatMap((issue) => issue.labels || []))).sort();
+    
+    openCount = issues.filter(i => i.status === 'open').length;
+    closedCount = issues.filter(i => i.status === 'closed').length;
+
+    // Default sort by createdAt desc
+    issues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  } catch (error) {
+    console.error("Failed to fetch data:", error);
+    return Astro.redirect("/404");
+  }
+}
+
+if (!project) {
+  return Astro.redirect("/404");
+}
+
+const currentFilter = Astro.url.searchParams.get('status') || 'open';
+const filteredIssues = currentFilter === 'all' 
+  ? issues 
+  : issues.filter(i => i.status === currentFilter);
+---
+
+<AppLayout title={`Issues - ${project.name}`}>
+  <div class="h-full min-h-0 flex flex-col">
+    <!-- Project Navigation Header -->
+    <div class="mb-8 border-b border-ink-200 dark:border-ink-700 pb-1">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-3xl font-bold text-ink-900 dark:text-ink-50 flex items-center gap-4">
+          <div>
+            {project.name}
+            <span class="text-ink-400 font-normal text-lg">/ Issues</span>
+          </div>
+          {activeSprint && (
+            <a href={`/projects/${projectId}/sprints/${activeSprint._id}`} class="text-sm font-medium px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-full flex items-center gap-2 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors">
+              <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              Active: {activeSprint.name}
+            </a>
+          )}
+        </h1>
+
+        <div class="flex items-center gap-2 mt-1">
+          <a
+            href={`/projects/${projectId}`}
+            class="px-3 py-1 text-ink-500 dark:text-ink-400 hover:bg-surface-100 dark:hover:bg-ink-800 rounded-lg text-sm transition-colors"
+          >
+            Board
+          </a>
+          <div class="px-3 py-1 bg-peach-500 text-white rounded-lg text-sm font-medium">
+            List
+          </div>
+          <a
+            href={`/projects/${projectId}/sprints`}
+            class="px-3 py-1 text-ink-500 dark:text-ink-400 hover:bg-surface-100 dark:hover:bg-ink-800 rounded-lg text-sm transition-colors"
+          >
+            Sprints
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+       <!-- Filter Tabs -->
+       <div class="flex gap-4 text-sm font-medium">
+           <a href="?status=open" class={`flex items-center gap-2 ${currentFilter === 'open' ? 'text-ink-900 dark:text-ink-50 underline decoration-2 decoration-peach-500 underline-offset-8' : 'text-ink-500 hover:text-ink-700 dark:text-ink-400'}`}>
+               Open <span class="bg-ink-100 dark:bg-ink-800 px-2 py-0.5 rounded-full text-xs">{openCount}</span>
+           </a>
+           <a href="?status=closed" class={`flex items-center gap-2 ${currentFilter === 'closed' ? 'text-ink-900 dark:text-ink-50 underline decoration-2 decoration-peach-500 underline-offset-8' : 'text-ink-500 hover:text-ink-700 dark:text-ink-400'}`}>
+               Closed <span class="bg-ink-100 dark:bg-ink-800 px-2 py-0.5 rounded-full text-xs">{closedCount}</span>
+           </a>
+           <a href="?status=all" class={`flex items-center gap-2 ${currentFilter === 'all' ? 'text-ink-900 dark:text-ink-50 underline decoration-2 decoration-peach-500 underline-offset-8' : 'text-ink-500 hover:text-ink-700 dark:text-ink-400'}`}>
+               All <span class="bg-ink-100 dark:bg-ink-800 px-2 py-0.5 rounded-full text-xs">{issues.length}</span>
+           </a>
+       </div>
+       
+       <!-- Actions -->
+       <div class="flex gap-3 w-full sm:w-auto items-center flex-wrap">
+           <div class="relative flex-1 sm:w-64 min-w-[200px]">
+               <input 
+                 type="text" 
+                 id="issue-search-input"
+                 placeholder="Search or filter results..." 
+                 class="w-full pl-9 pr-4 py-2 rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 text-sm focus:outline-none focus:ring-2 focus:ring-peach-500/50" 
+                 oninput="filterListIssues()"
+               />
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-3 text-ink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+               </svg>
+           </div>
+           
+           <select 
+             id="issue-priority-filter" 
+             onchange="filterListIssues()"
+             class="h-9 px-3 rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 text-sm focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+           >
+             <option value="">Priority</option>
+             <option value="Low">Low</option>
+             <option value="Medium">Medium</option>
+             <option value="High">High</option>
+           </select>
+
+           <select 
+             id="issue-label-filter" 
+             onchange="filterListIssues()"
+             class="h-9 px-3 rounded-xl bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 text-sm focus:outline-none focus:ring-2 focus:ring-peach-500/50"
+           >
+             <option value="">Label</option>
+             {uniqueLabels.map(l => <option value={l}>{l}</option>)}
+           </select>
+
+           <a href={`/projects/${projectId}/issues/new`} class="px-4 py-2 bg-peach-500 hover:bg-peach-600 text-white rounded-xl text-sm font-medium transition-colors shadow-sm shadow-peach-500/30 flex items-center justify-center whitespace-nowrap">
+               New issue
+           </a>
+       </div>
+    </div>
+
+    <!-- Issues List -->
+    <div class="bg-surface-50 dark:bg-ink-900 border border-ink-200 dark:border-ink-700 rounded-2xl overflow-hidden shadow-sm">
+        {filteredIssues.length > 0 ? (
+            <ul class="divide-y divide-ink-100 dark:divide-ink-800">
+                {filteredIssues.map((issue) => (
+                    <li 
+                      class="hover:bg-surface-100 dark:hover:bg-ink-800/50 transition-colors group flex flex-col issue-list-item"
+                      data-title={(issue.title || '').toLowerCase()}
+                      data-priority={issue.priority || ''}
+                      data-labels={JSON.stringify(issue.labels || [])}
+                    >
+                        <div class="p-4 flex items-start gap-4 cursor-pointer" onclick={`toggleIssueDetails('${issue._id}')`}>
+                            <div class="pt-1">
+                               {issue.status === 'open' ? (
+                                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                                       <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                   </svg>
+                               ) : (
+                                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-ink-400" viewBox="0 0 20 20" fill="currentColor">
+                                       <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" style="transform: rotate(45deg); transform-origin: center;" />
+                                   </svg>
+                               )}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-base font-semibold text-ink-900 dark:text-ink-100 truncate block text-left">
+                                        {issue.title}
+                                    </span>
+                                    {issue.labels && issue.labels.map((label: string) => (
+                                        <span class="px-2 py-0.5 rounded-md bg-surface-200 dark:bg-ink-700 text-xs font-medium text-ink-600 dark:text-ink-300">
+                                            {label}
+                                        </span>
+                                    ))}
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500 dark:text-ink-400">
+                                    <span>#{issue._id.toString().slice(-4)}</span>
+                                    <span>&middot;</span>
+                                    <span>created {new Date(issue.createdAt).toLocaleDateString()}</span>
+                                    <span>&middot;</span>
+                                    <span class="bg-surface-200/50 dark:bg-ink-800 px-1.5 py-0.5 rounded text-ink-600 dark:text-ink-300">
+                                        {issue.listName}
+                                    </span>
+                                    {issue.sprintName && (
+                                        <span class="bg-surface-200/50 dark:bg-ink-800 px-1.5 py-0.5 rounded text-ink-600 dark:text-ink-300 flex items-center gap-1" title="Sprint">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                                            </svg>
+                                            {issue.sprintName}
+                                        </span>
+                                    )}
+                                    {issue.priority && (
+                                        <span class={`ml-auto sm:ml-0 px-1.5 py-0.5 rounded font-medium ${
+                                            issue.priority === 'High' ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : 
+                                            issue.priority === 'Medium' ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' : 
+                                            'text-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                                        }`}>
+                                            {issue.priority}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <!-- Actions -->
+                            <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+                                <button 
+                                    onclick={`openEditIssueModal('${issue._id}')`}
+                                    class="p-2 text-ink-400 hover:text-ink-900 dark:hover:text-ink-100 hover:bg-surface-200 dark:hover:bg-ink-700 rounded-lg transition-colors"
+                                    title="Edit"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </button>
+                                <button 
+                                    onclick={`window.openDeleteIssueDialog('${issue._id}')`}
+                                    class="p-2 text-ink-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                    title="Delete"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                                <div class="ml-1 text-ink-400">
+                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-200" id={`chevron-${issue._id}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                     </svg>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible Details -->
+                        <div id={`details-${issue._id}`} class="hidden px-4 pb-4 pl-14">
+                            <div class="p-4 rounded-xl bg-surface-50 dark:bg-ink-900/50 border border-ink-100 dark:border-ink-800 text-sm text-ink-600 dark:text-ink-300 whitespace-pre-wrap">
+                                {issue.description || <span class="text-ink-400 italic">No description provided.</span>}
+                            </div>
+                        </div>
+                    </li>
+                ))}
+            </ul>
+        ) : (
+           <div class="flex flex-col items-center justify-center py-16 text-center">
+               <div class="rounded-full bg-surface-100 dark:bg-ink-800 p-4 mb-4">
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-ink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                   </svg>
+               </div>
+               <h3 class="text-lg font-medium text-ink-900 dark:text-ink-100 mb-1">No issues found</h3>
+               <p class="text-ink-500 dark:text-ink-400 text-sm max-w-sm">
+                   There are no issues matching your current filter. Try adjusting your search or create a new issue.
+               </p>
+               {currentFilter !== 'all' && (
+                   <a href="?status=all" class="mt-4 text-peach-600 dark:text-peach-400 text-sm font-medium hover:underline">
+                       Clear filters
+                   </a>
+               )}
+           </div>
+        )}
+        
+        {/* Pagination Placeholder */}
+        {filteredIssues.length > 0 && (
+            <div class="px-4 py-3 border-t border-ink-100 dark:border-ink-800 bg-surface-50 dark:bg-ink-900/50 flex items-center justify-between">
+                <p class="text-xs text-ink-500 dark:text-ink-400">
+                    Showing <span class="font-medium">{filteredIssues.length}</span> results
+                </p>
+            </div>
+        )}
+    </div>
+
+  </div>
+
+  <IssueEditModal />
+  <DeleteIssueDialog />
+
+  <script define:vars={{ issues: filteredIssues }}>
+    window.issues = issues;
+
+    window.toggleIssueDetails = (issueId) => {
+        const details = document.getElementById(`details-${issueId}`);
+        const chevron = document.getElementById(`chevron-${issueId}`);
+        if (!details) return;
+
+        details.classList.toggle('hidden');
+        if (chevron) {
+            chevron.style.transform = details.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+    };
+
+    window.filterListIssues = function() {
+      const searchInput = document.getElementById('issue-search-input');
+      const priorityInput = document.getElementById('issue-priority-filter');
+      const labelInput = document.getElementById('issue-label-filter');
+      
+      const search = (searchInput?.value || '').toLowerCase();
+      const priority = priorityInput?.value || '';
+      const label = labelInput?.value || '';
+
+      const items = document.querySelectorAll('.issue-list-item');
+      let visibleCount = 0;
+
+      items.forEach(item => {
+          const title = item.getAttribute('data-title') || '';
+          const itemPriority = item.getAttribute('data-priority') || '';
+          let itemLabels = [];
+          try {
+             itemLabels = JSON.parse(item.getAttribute('data-labels') || '[]');
+          } catch(e) {}
+
+          const matchesSearch = title.includes(search);
+          const matchesPriority = priority === '' || itemPriority === priority;
+          const matchesLabel = label === '' || itemLabels.includes(label);
+
+          if (matchesSearch && matchesPriority && matchesLabel) {
+              item.classList.remove('hidden');
+              visibleCount++;
+          } else {
+              item.classList.add('hidden');
+          }
+      });
+    };
+  </script>
+</AppLayout>

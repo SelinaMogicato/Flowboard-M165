@@ -1,0 +1,73 @@
+---
+import Modal from "../ui/Modal.astro";
+import Button from "../ui/Button.astro";
+
+interface Props {
+  id?: string;
+}
+
+const { id = "complete_sprint_modal" } = Astro.props;
+---
+
+<Modal id={id} title="Complete Sprint?">
+  <div class="space-y-4">
+    <p class="text-ink-600 dark:text-ink-300">
+      Are you sure you want to complete this sprint?
+    </p>
+
+    <input type="hidden" id="complete_sprint_id" />
+
+    <div class="flex justify-end gap-3 pt-2">
+      <Button
+        variant="secondary"
+        onclick={`document.getElementById('${id}').close()`}>Cancel</Button
+      >
+      <Button
+        variant="primary"
+        class="!bg-peach-600 hover:!bg-peach-700 dark:!bg-peach-500/80 dark:hover:!bg-peach-500 !text-white border-none"
+        id="confirm_complete_sprint">Complete Sprint</Button
+      >
+    </div>
+  </div>
+</Modal>
+
+<script>
+  // @ts-nocheck
+  const modal = document.getElementById("complete_sprint_modal");
+  const confirmBtn = document.getElementById("confirm_complete_sprint");
+  const inputId = document.getElementById("complete_sprint_id");
+
+  window.openCompleteSprintDialog = (sprintId) => {
+    if (inputId) inputId.value = sprintId;
+    if (modal) modal.showModal();
+  };
+
+  confirmBtn?.addEventListener("click", async () => {
+    const sprintId = inputId?.value;
+    if (!sprintId) return;
+
+    const originalText = confirmBtn.textContent;
+    confirmBtn.textContent = "Completing...";
+    confirmBtn.disabled = true;
+
+    try {
+      const res = await fetch(`/api/sprints/${sprintId}/complete`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        alert(data.error || "Failed to complete sprint");
+        confirmBtn.textContent = originalText;
+        confirmBtn.disabled = false;
+      }
+    } catch (e) {
+      console.error(e);
+      alert("An error occurred while completing the sprint");
+      confirmBtn.textContent = originalText;
+      confirmBtn.disabled = false;
+    }
+  });
+</script>

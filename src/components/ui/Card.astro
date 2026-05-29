@@ -1,0 +1,21 @@
+---
+// Explanation: A container component that provides a white (or dark) background with a shadow and rounded corners.
+// It's used to group related content together, like a project item in a list.
+
+interface Props {
+  class?: string;
+  padded?: boolean;
+}
+
+const { class: className, padded = true } = Astro.props;
+---
+
+<div
+  class:list={[
+    "bg-white dark:bg-ink-800 rounded-3xl shadow-card overflow-hidden transition-colors border border-transparent dark:border-ink-700",
+    padded && "p-6",
+    className,
+  ]}
+>
+  <slot />
+</div>

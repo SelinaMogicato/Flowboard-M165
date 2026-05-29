@@ -1,0 +1,87 @@
+---
+// FlowBoard ConfirmModal
+// - Uses Modal (layered UI)
+// - Semantic "tone" instead of arbitrary class injection
+// - Dispatches "confirm" event on the dialog element
+// - Consistent focus ring + spacing
+
+import Modal from "./Modal.astro";
+import Button from "./Button.astro";
+
+type Tone = "danger" | "success" | "neutral";
+
+interface Props {
+  id: string;
+  title?: string;
+  message?: string;
+  confirmText?: string;
+  cancelText?: string;
+  tone?: Tone;
+}
+
+const {
+  id,
+  title = "Are you sure?",
+  message = "This action cannot be undone.",
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  tone = "danger",
+} = Astro.props;
+
+const toneLabel =
+  tone === "danger" ? "Danger" : tone === "success" ? "Success" : "Confirm";
+
+const confirmClassesByTone: Record<Tone, string> = {
+  danger: "bg-red-600/90 hover:bg-red-600 text-white",
+  success: "bg-emerald-600/90 hover:bg-emerald-600 text-white",
+  neutral:
+    "bg-ink-900 hover:bg-ink-700 text-white dark:bg-ink-100 dark:hover:bg-ink-300 dark:text-ink-900",
+};
+
+const confirmBase =
+  "rounded-xl px-4 py-2 text-sm font-medium transition-colors " +
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-peach-300/70 " +
+  "disabled:opacity-60 disabled:pointer-events-none";
+
+const confirmBtnClass = `${confirmBase} ${confirmClassesByTone[tone]}`;
+---
+
+<Modal id={id} title={title}>
+  <div class="space-y-6">
+    <p class="text-ink-600 dark:text-ink-300 text-base leading-relaxed">
+      {message}
+    </p>
+
+    <div class="flex justify-end gap-3 pt-2">
+      <Button variant="ghost" type="button" id={`${id}_cancel_btn`}>
+        {cancelText}
+      </Button>
+
+      <button
+        type="button"
+        id={`${id}_confirm_btn`}
+        class={confirmBtnClass}
+        aria-label={toneLabel}
+      >
+        {confirmText}
+      </button>
+    </div>
+  </div>
+</Modal>
+
+<script define:vars={{ id }}>
+  const dialog = document.getElementById(id);
+  const cancelBtn = document.getElementById(`${id}_cancel_btn`);
+  const confirmBtn = document.getElementById(`${id}_confirm_btn`);
+
+  cancelBtn?.addEventListener("click", () => {
+    dialog?.close();
+  });
+
+  confirmBtn?.addEventListener("click", () => {
+    // dispatch on the dialog element
+    const event = new CustomEvent("confirm", { bubbles: true });
+    dialog?.dispatchEvent(event);
+    dialog?.close();
+  });
+</script>

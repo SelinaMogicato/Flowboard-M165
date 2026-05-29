@@ -1,0 +1,117 @@
+---
+import AuthLayout from "../layouts/AuthLayout.astro";
+import Card from "../components/ui/Card.astro";
+import Input from "../components/ui/Input.astro";
+import Button from "../components/ui/Button.astro";
+import { getSessionFromRequest } from "../lib/auth/session";
+
+const result = await getSessionFromRequest(Astro.cookies);
+if (result) {
+  return Astro.redirect("/projects");
+}
+---
+
+<AuthLayout>
+  <Card
+    class="w-full max-w-md p-8 shadow-2xl rounded-3xl relative overflow-hidden"
+  >
+    <div
+      class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-brand-gradient-start to-brand-gradient-end"
+    >
+    </div>
+
+    <div class="mb-8 text-center">
+      <h1
+        class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-peach-600 to-peach-800"
+      >
+        Get Started
+      </h1>
+      <p class="text-ink-400 mt-2">Create your FlowBoard account</p>
+    </div>
+
+    <form id="register-form" class="space-y-6">
+      <Input name="name" type="text" placeholder="Jane Doe" label="Full Name" />
+
+      <Input
+        name="email"
+        type="email"
+        placeholder="you@company.com"
+        label="Email Address"
+        required
+      />
+
+      <Input
+        name="password"
+        type="password"
+        placeholder="••••••••"
+        label="Password"
+        required
+      />
+
+      <div
+        id="error-message"
+        class="text-red-500 text-sm hidden bg-red-50 p-3 rounded-xl border border-red-100"
+      >
+      </div>
+
+      <Button
+        type="submit"
+        variant="primary"
+        size="lg"
+        class="w-full shadow-lg shadow-peach-500/30"
+      >
+        Create Account
+      </Button>
+    </form>
+
+    <div class="mt-8 text-center text-sm text-ink-400">
+      Already have an account? <a
+        href="/login"
+        class="text-peach-600 font-medium hover:underline">Sign In</a
+      >
+    </div>
+  </Card>
+</AuthLayout>
+
+<script>
+  const form = document.getElementById("register-form") as HTMLFormElement;
+  const errorDiv = document.getElementById("error-message");
+
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (errorDiv) errorDiv.classList.add("hidden");
+
+      const formData = new FormData(form);
+      const name = formData.get("name");
+      const email = formData.get("email");
+      const password = formData.get("password");
+
+      try {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, name }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (errorDiv) {
+            errorDiv.textContent = data.error || "Registration failed";
+            errorDiv.classList.remove("hidden");
+          }
+          window.toast.error(data.error || "Registration failed");
+        } else {
+          window.toast.success("Account created! Redirecting...");
+          setTimeout(() => (window.location.href = "/projects"), 1000);
+        }
+      } catch (err) {
+        if (errorDiv) {
+          errorDiv.textContent = "Network error. Please try again.";
+          errorDiv.classList.remove("hidden");
+        }
+      }
+    });
+  }
+</script>
