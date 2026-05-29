@@ -1,0 +1,99 @@
+erDiagram
+    USERS {
+        ObjectId _id PK
+        string email UK
+        string name
+        string passwordHash
+        date createdAt
+        date updatedAt
+    }
+
+    SESSIONS {
+        ObjectId _id PK
+        ObjectId userId FK
+        string tokenHash UK
+        date createdAt
+        date expiresAt
+        date revokedAt
+        string userAgent
+        string ip
+    }
+
+    PROJECTS {
+        ObjectId _id PK
+        string name
+        string description
+        string repositoryUrl
+        ObjectId ownerId FK
+        boolean isArchived
+        date createdAt
+        date updatedAt
+    }
+
+    PROJECT_LISTS_EMBEDDED {
+        string id PK
+        string title
+        int order
+        string color
+    }
+
+    PROJECT_MEMBERS {
+        ObjectId _id PK
+        ObjectId projectId FK
+        ObjectId userId FK
+        string role
+        ObjectId invitedBy FK
+        date createdAt
+        date updatedAt
+    }
+
+    SPRINTS {
+        ObjectId _id PK
+        string projectId FK
+        string name
+        string goal
+        string status
+        date startDate
+        date endDate
+        date createdAt
+        date updatedAt
+    }
+
+    ISSUES {
+        ObjectId _id PK
+        string projectId FK
+        string listId
+        ObjectId sprintId FK
+        string title
+        string description
+        string priority
+        int order
+        string[] labels
+        string assignee
+        date createdAt
+        date updatedAt
+    }
+
+    IMPORTS {
+        ObjectId _id PK
+        string type
+        string status
+        ObjectId importedBy FK
+        int totalRows
+        int insertedRows
+        int skippedRows
+        json errors
+        date createdAt
+    }
+
+    USERS ||--o{ SESSIONS : has
+    USERS ||--o{ PROJECTS : owns
+    USERS ||--o{ PROJECT_MEMBERS : memberOf
+    PROJECTS ||--o{ PROJECT_MEMBERS : hasMembers
+    USERS ||--o{ PROJECT_MEMBERS : invitedBy
+    PROJECTS ||--o{ PROJECT_LISTS_EMBEDDED : embeds
+    PROJECTS ||--o{ SPRINTS : has
+    PROJECTS ||--o{ ISSUES : has
+    SPRINTS ||--o{ ISSUES : groups
+    USERS ||--o{ ISSUES : assignedTo
+    USERS ||--o{ IMPORTS : creates
