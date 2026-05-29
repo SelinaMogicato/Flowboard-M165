@@ -14,6 +14,9 @@ yarn-error.log*
 pnpm-debug.log*
 
 build/
+# database backups (can contain sensitive user data)
+backups/
+
 # environment variables
 .env
 .env.production

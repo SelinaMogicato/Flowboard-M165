@@ -5,12 +5,27 @@ export async function ensureIndexes() {
   const db = await getDb();
   console.log("Ensuring indexes...");
 
+  // Users - unique email so no two accounts share the same address
+  await db.collection('users').createIndex({ email: 1 }, { unique: true });
+
+  // Sessions - fast token lookup and automatic TTL expiry
+  await db.collection('sessions').createIndex({ tokenHash: 1 }, { unique: true });
+  await db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
   // Projects
   await db.collection('projects').createIndex({ createdAt: -1 });
 
-  // Issues
+  // Project members - one membership record per user per project
+  await db.collection('projectMembers').createIndex(
+    { projectId: 1, userId: 1 },
+    { unique: true }
+  );
+
+  // Issues - board loads issues grouped by list and ordered by position
   await db.collection('issues').createIndex({ projectId: 1, status: 1 });
   await db.collection('issues').createIndex({ createdAt: -1 });
+  await db.collection('issues').createIndex({ projectId: 1, listId: 1, order: 1 });
+  await db.collection('issues').createIndex({ projectId: 1, sprintId: 1 });
 
   // Sprints
   await db.collection('sprints').createIndex({ projectId: 1, status: 1 });

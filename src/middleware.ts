@@ -6,8 +6,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Routes to protect (pages and API)
   const protectedPaths = [
     '/projects',
-    '/board', 
+    '/board',
     '/settings',
+    '/competencies',
   ];
   const protectedApis = [
     '/api/projects'

@@ -1,0 +1,321 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const roles = [
+  {
+    name: "owner",
+    description: "Full access, including deleting the project and managing members",
+  },
+  {
+    name: "admin",
+    description:
+      "Can manage project content, members, lists, issues and sprints, but cannot delete the whole project",
+  },
+  {
+    name: "member",
+    description: "Can read the project and work with issues",
+  },
+  {
+    name: "viewer",
+    description: "Can only read the project",
+  },
+];
+
+const permissions = [
+  { name: "project.read",   owner: true,  admin: true,  member: true,  viewer: true  },
+  { name: "project.update", owner: true,  admin: true,  member: false, viewer: false },
+  { name: "project.delete", owner: true,  admin: false, member: false, viewer: false },
+  { name: "members.manage", owner: true,  admin: true,  member: false, viewer: false },
+  { name: "lists.manage",   owner: true,  admin: true,  member: false, viewer: false },
+  { name: "issues.create",  owner: true,  admin: true,  member: true,  viewer: false },
+  { name: "issues.update",  owner: true,  admin: true,  member: true,  viewer: false },
+  { name: "issues.delete",  owner: true,  admin: true,  member: false, viewer: false },
+  { name: "sprints.manage", owner: true,  admin: true,  member: false, viewer: false },
+];
+
+const competencyProof = [
+  {
+    code: "D1F",
+    summary:
+      "Predefined project roles and permissions are implemented and checked before important actions",
+    files: [
+      "src/lib/auth/permissions.ts",
+      "src/lib/services/project.service.ts",
+      "src/lib/services/project-member.service.ts",
+      "src/pages/api/projects/[projectId].ts",
+      "src/pages/api/issues/[issueId].ts",
+      "src/pages/api/sprints/[sprintId].ts",
+    ],
+  },
+  {
+    code: "D1E",
+    summary:
+      "A project-based access control concept was designed and documented",
+    files: [
+      "src/pages/competencies/access-control.astro",
+      "documentation/d1-access-control-concept.md",
+      "src/lib/db/indexes.ts",
+    ],
+  },
+];
+---
+
+<AppLayout>
+  <div class="max-w-5xl mx-auto space-y-10">
+
+    <!-- Page header -->
+    <div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-white mb-2">Access Control</h1>
+      <p class="text-ink-500 dark:text-ink-400">Modul 165 &mdash; Competencies D1F and D1E</p>
+    </div>
+
+    <!-- Intro -->
+    <Card>
+      <h2 class="text-xl font-semibold text-ink-900 dark:text-white mb-3">About this page</h2>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed">
+        FlowBoard is a team app, so not every user should be allowed to do everything. For this reason
+        I added a simple role and permission concept. The roles are stored with the project membership,
+        because a user can have different rights in different projects. Someone might be an owner of one
+        project and just a viewer in another. The permission checks happen in the service layer and in
+        the API routes before any action is actually carried out.
+      </p>
+    </Card>
+
+    <!-- D1F -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">D1F</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Implementing predefined permissions</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          This covers how the permission system is actually built and used in the app.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">How roles are stored</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Every project membership record in the <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">projectMembers</span> collection
+            has a <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">role</span> field.
+            When a project is created, the creator automatically gets the <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">owner</span> role.
+            Every other user who gets added starts as a <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">member</span> by default.
+            The possible roles are <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">owner</span>,
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">admin</span>,
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">member</span>, and
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">viewer</span>.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">How permissions are checked</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            All permissions are defined in <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">src/lib/auth/permissions.ts</span>.
+            That file maps each role to a list of allowed permissions. Before any important action, the API route
+            calls <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">requireProjectPermission()</span> from the project service.
+            That function fetches the caller's membership record, reads their role, and then calls
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">requirePermission()</span> which throws
+            an error if the role does not have the needed permission. The API route catches that and returns a 403 response.
+            This keeps the checks consistent because all routes use the same shared helper instead of each doing their own thing.
+          </p>
+        </Card>
+      </div>
+    </section>
+
+    <!-- Role table -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Roles</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          There are four roles in FlowBoard. Each project membership has exactly one role.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-8 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Role</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">What the role is allowed to do</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              {roles.map((r) => (
+                <tr>
+                  <td class="py-3 pr-8 align-top">
+                    <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">
+                      {r.name}
+                    </span>
+                  </td>
+                  <td class="py-3 text-ink-600 dark:text-ink-300 leading-relaxed">{r.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+    <!-- Permission matrix -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Permission matrix</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          This table shows which role is allowed to do what.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Permission</th>
+                <th class="text-center py-3 px-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Owner</th>
+                <th class="text-center py-3 px-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Admin</th>
+                <th class="text-center py-3 px-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Member</th>
+                <th class="text-center py-3 px-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Viewer</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              {permissions.map((p) => (
+                <tr>
+                  <td class="py-3 pr-6 font-mono text-xs text-ink-700 dark:text-ink-300">{p.name}</td>
+                  {[p.owner, p.admin, p.member, p.viewer].map((allowed) => (
+                    <td class="py-3 px-4 text-center">
+                      {allowed ? (
+                        <span class="inline-block text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">yes</span>
+                      ) : (
+                        <span class="inline-block text-xs font-medium text-ink-400 dark:text-ink-500 bg-surface-200 dark:bg-ink-700 px-2 py-0.5 rounded">no</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+    <!-- D1E -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">D1E</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Designing an access control concept</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          This covers the design decisions behind the permission system.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why roles are project-specific</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            A user in FlowBoard can be a part of multiple projects. Their role should not be the same across all of them.
+            Someone might be an owner of a personal project and just a viewer in a team project they were added to for
+            reference. Attaching the role to the membership record rather than to the user makes this possible without
+            any extra complexity.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why roles live in projectMembers and not in users</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            The <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">users</span> collection
+            only stores who someone is: their name, email, and password hash. It knows nothing about what projects they
+            belong to. Putting a role field there would only make sense if there was one global role for the whole app,
+            which is not the case here. The
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">projectMembers</span> collection
+            is the right place because it already represents the relationship between a user and a project. Adding the
+            role there keeps everything in one place and makes access control lookups straightforward.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why sessions are separate from permissions</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Sessions only answer one question: is this request coming from a logged-in user? Permissions answer a
+            different question: is this user allowed to do this specific thing in this project? Mixing those two
+            concerns into one system would make both harder to understand and maintain. Sessions expire and get
+            revoked. Permissions are stable as long as the membership exists. Keeping them separate also means
+            a user can be logged out without losing their project roles, and a role change takes effect immediately
+            without having to invalidate their session.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why owner has special rights</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Deleting a project is not something that should be done by accident or by someone who was just added
+            to help manage content. The owner role is for the person who created the project and is responsible
+            for it. Keeping <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">project.delete</span>
+            exclusive to the owner is a conscious decision to protect against accidental or unauthorized deletion.
+            The unique index on <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">projectId + userId</span>
+            in the projectMembers collection also makes sure a user can only hold one role per project at a time.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why viewer is useful</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Not everyone needs to change things. A stakeholder or a client might want to see the board without
+            being able to create or delete issues. The viewer role makes that possible without having to share
+            credentials or remove the person after a meeting. It also makes the permission model more complete,
+            because without it, there would be no clean way to give read-only access to a specific project.
+          </p>
+        </Card>
+      </div>
+    </section>
+
+    <!-- Competency proof -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Competency proof</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Here is a summary of where each competency is shown in the project.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Competency</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">How it is shown in FlowBoard</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Files</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              {competencyProof.map((c) => (
+                <tr>
+                  <td class="py-4 pr-6 align-top">
+                    <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">
+                      {c.code}
+                    </span>
+                  </td>
+                  <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">{c.summary}</td>
+                  <td class="py-4 align-top">
+                    <div class="space-y-1">
+                      {c.files.map((f) => (
+                        <p class="text-xs font-mono text-ink-500 dark:text-ink-400">{f}</p>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+  </div>
+</AppLayout>

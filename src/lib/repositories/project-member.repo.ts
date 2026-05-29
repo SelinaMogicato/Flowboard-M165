@@ -1,11 +1,12 @@
 import { ObjectId } from 'mongodb';
 import { getDb } from '../db/mongo';
+import { type ProjectRole } from '../auth/permissions';
 
 export interface ProjectMember {
   _id?: ObjectId;
   projectId: ObjectId;
   userId: ObjectId;
-  role: "owner" | "member";
+  role: ProjectRole;
   invitedBy?: ObjectId;
   createdAt: Date;
   updatedAt: Date;

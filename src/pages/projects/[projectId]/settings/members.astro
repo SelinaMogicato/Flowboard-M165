@@ -41,6 +41,7 @@ const currentUserMember = members.find(
   (m) => m.userId.toString() === session.user._id!.toString(),
 );
 const isOwner = currentUserMember?.role === "owner";
+const memberEmails = members.map((m) => String(m.user?.email || "").toLowerCase());
 ---
 
 <AppLayout title={`Members - ${project?.name}`}>
@@ -173,13 +174,21 @@ const isOwner = currentUserMember?.role === "owner";
               </p>
 
               <form id="add-member-form" class="space-y-4">
-                <Input
-                  name="email"
-                  type="email"
-                  label="User Email"
-                  placeholder="colleague@example.com"
-                  required
-                />
+                <div class="relative">
+                  <Input
+                    id="member-email-input"
+                    name="email"
+                    type="email"
+                    label="User Email"
+                    placeholder="colleague@example.com"
+                    autocomplete="off"
+                    required
+                  />
+                  <div
+                    id="user-suggestions"
+                    class="hidden absolute z-20 mt-1 w-full rounded-xl border border-ink-200 dark:border-ink-700 bg-white dark:bg-ink-900 shadow-lg max-h-56 overflow-y-auto"
+                  ></div>
+                </div>
 
                 <p id="add-message" class="text-sm font-medium hidden" />
 
@@ -203,10 +212,92 @@ const isOwner = currentUserMember?.role === "owner";
   </div>
 </AppLayout>
 
-<script define:vars={{ projectId }}>
+<script define:vars={{ projectId, memberEmails }}>
   // Add Member
   const addForm = document.getElementById("add-member-form");
   const addMessage = document.getElementById("add-message");
+  const emailInput = document.getElementById("member-email-input");
+  const suggestionsEl = document.getElementById("user-suggestions");
+  const existingMemberEmails = new Set((memberEmails || []).map((email) => String(email).toLowerCase()));
+  let suggestionUsers = [];
+
+  const hideSuggestions = () => {
+    suggestionsEl?.classList.add("hidden");
+    if (suggestionsEl) suggestionsEl.innerHTML = "";
+  };
+
+  const renderSuggestions = (users) => {
+    if (!suggestionsEl) return;
+
+    const filtered = users.filter((u) => !existingMemberEmails.has(String(u.email || "").toLowerCase()));
+    suggestionUsers = filtered;
+
+    if (!filtered.length) {
+      suggestionsEl.innerHTML =
+        '<div class="px-4 py-3 text-sm text-ink-500 dark:text-ink-400">No matching users</div>';
+      suggestionsEl.classList.remove("hidden");
+      return;
+    }
+
+    const escapeHtml = (value) =>
+      String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+
+    suggestionsEl.innerHTML = filtered
+      .map((u, index) => {
+        const safeName = escapeHtml(u.name ? String(u.name) : "Unnamed User");
+        const safeEmail = escapeHtml(String(u.email || ""));
+        return `<button type="button" data-index="${index}" class="w-full text-left px-4 py-3 hover:bg-surface-100 dark:hover:bg-ink-800 transition-colors">
+          <div class="text-sm font-medium text-ink-900 dark:text-ink-100">${safeName}</div>
+          <div class="text-xs text-ink-500 dark:text-ink-400">${safeEmail}</div>
+        </button>`;
+      })
+      .join("");
+
+    suggestionsEl.classList.remove("hidden");
+  };
+
+  const loadSuggestions = async (query = "") => {
+    try {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}&limit=12`);
+      if (!res.ok) return hideSuggestions();
+      const result = await res.json();
+      renderSuggestions(result.data || []);
+    } catch {
+      hideSuggestions();
+    }
+  };
+
+  emailInput?.addEventListener("focus", () => {
+    loadSuggestions(emailInput.value || "");
+  });
+
+  emailInput?.addEventListener("input", () => {
+    loadSuggestions(emailInput.value || "");
+  });
+
+  suggestionsEl?.addEventListener("mousedown", (event) => {
+    const target = event.target.closest("[data-index]");
+    if (!target || !emailInput) return;
+    const idx = Number(target.getAttribute("data-index"));
+    const selected = suggestionUsers[idx];
+    if (!selected) return;
+    event.preventDefault();
+    emailInput.value = selected.email;
+    hideSuggestions();
+    emailInput.focus();
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!target) return;
+    if (target === emailInput || suggestionsEl?.contains(target)) return;
+    hideSuggestions();
+  });
 
   addForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -235,6 +326,7 @@ const isOwner = currentUserMember?.role === "owner";
         addMessage.textContent = "Member added successfully";
         addMessage.classList.add("text-green-600", "dark:text-green-400");
         addForm.reset();
+        hideSuggestions();
         setTimeout(() => window.location.reload(), 1000);
       } else {
         addMessage.textContent = result.error || "Failed to add member";

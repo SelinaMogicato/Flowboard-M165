@@ -385,6 +385,32 @@ What they do:
 - `npm run preview` previews the built app locally
 - `npm run db:indexes` creates MongoDB indexes defined in `src/lib/db/indexes.ts`
 - `npm run auth:create-admin` creates a user using `ADMIN_EMAIL` and `ADMIN_PASSWORD`
+- `npm run db:backup` creates a timestamped backup of the MongoDB database using `mongodump`
+- `npm run db:restore` restores a backup using `mongorestore` (pass the backup path as an argument)
+
+## Database Backup and Restore
+
+FlowBoard includes scripts to back up and restore the MongoDB database using the official MongoDB Database Tools.
+
+### Create a backup
+
+```bash
+npm run db:backup
+```
+
+This creates a timestamped folder inside `backups/`, for example `backups/flowboard_2026-05-29_10-30-00/`. The script reads `MONGODB_URI` and `MONGODB_DB` from your environment variables and uses `mongodump` to export the database.
+
+### Restore a backup
+
+```bash
+npm run db:restore -- ./backups/flowboard_2026-05-29_10-30-00
+```
+
+Replace the path with the actual backup folder you want to restore. The script uses `mongorestore` with the `--drop` flag.
+
+**Warning: restore replaces the current database content.** The `--drop` flag drops all existing collections before writing the backup data. Make sure you are pointing at the right backup folder before running this command.
+
+The `backups/` folder is listed in `.gitignore` because backups can contain sensitive user data.
 
 ## Docker
 

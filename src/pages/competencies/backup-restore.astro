@@ -1,0 +1,231 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const competencyProof = [
+  {
+    code: "E1F",
+    summary:
+      "Backup and restore can be executed with scripts using mongodump and mongorestore",
+    files: [
+      "scripts/db-backup.sh",
+      "scripts/db-restore.sh",
+    ],
+  },
+  {
+    code: "E1E",
+    summary:
+      "A backup concept explains what is backed up, when backups are created and how restore works",
+    files: [
+      "src/pages/competencies/backup-restore.astro",
+      "documentation/e1-backup-restore-concept.md",
+    ],
+  },
+];
+---
+
+<AppLayout>
+  <div class="max-w-5xl mx-auto space-y-10">
+
+    <!-- Page header -->
+    <div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-white mb-2">Backup and Restore</h1>
+      <p class="text-ink-500 dark:text-ink-400">Modul 165 &mdash; Competencies E1F and E1E</p>
+    </div>
+
+    <!-- Intro -->
+    <Card>
+      <h2 class="text-xl font-semibold text-ink-900 dark:text-white mb-3">About this page</h2>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed">
+        FlowBoard stores important project data in MongoDB. If something goes wrong during development or testing,
+        I need a way to get the data back. That is why I added backup and restore scripts for the database.
+        The backups include everything: users, sessions, projects, project members, issues, and sprints.
+        This page explains how the backup and restore process works and documents the concept behind it.
+      </p>
+    </Card>
+
+    <!-- E1F -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">E1F</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Applying backup and restore</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          This covers how the backup and restore scripts are built and how to use them.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Creating a backup</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-4">
+            The backup script uses <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">mongodump</span> to
+            export the database into BSON files. It reads the connection string from
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">MONGODB_URI</span> and the database name
+            from <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">MONGODB_DB</span>, both from environment
+            variables. A timestamped folder is created automatically inside the
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">backups/</span> directory
+            so every backup gets its own unique location.
+          </p>
+          <p class="text-xs font-semibold uppercase tracking-widest text-ink-400 dark:text-ink-500 mb-2">Command</p>
+          <pre class="bg-surface-200 dark:bg-ink-800 rounded-xl px-4 py-3 text-sm font-mono text-ink-800 dark:text-ink-100 overflow-x-auto">npm run db:backup</pre>
+          <p class="text-sm text-ink-500 dark:text-ink-400 mt-3">
+            The backup is saved in a folder like
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">backups/flowboard_2026-05-29_10-30-00/</span>.
+            The script fails immediately if either environment variable is missing.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Restoring a backup</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-4">
+            The restore script uses <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">mongorestore</span> to
+            read a backup folder and write the data back into MongoDB. It uses the
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">--drop</span> flag, which means all
+            existing collections are dropped before the backup data is written. This replaces the current database
+            content completely. The backup path is passed as a command line argument.
+          </p>
+          <p class="text-xs font-semibold uppercase tracking-widest text-ink-400 dark:text-ink-500 mb-2">Command</p>
+          <pre class="bg-surface-200 dark:bg-ink-800 rounded-xl px-4 py-3 text-sm font-mono text-ink-800 dark:text-ink-100 overflow-x-auto">npm run db:restore -- ./backups/flowboard_2026-05-29_10-30-00</pre>
+          <p class="text-sm text-amber-600 dark:text-amber-400 mt-3 font-medium">
+            Restore with --drop deletes the current database first. Make sure you are pointing at the right backup before running this.
+          </p>
+        </Card>
+      </div>
+    </section>
+
+    <!-- E1E -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">E1E</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Backup concept</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          This covers the design decisions and reasoning behind the backup setup.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">What is backed up</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            The backup covers the entire MongoDB database, including all six collections:
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">users</span>,
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">sessions</span>,
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">projects</span>,
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">projectMembers</span>,
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">issues</span>, and
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">sprints</span>.
+            The BSON files produced by <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">mongodump</span> represent
+            the exact state of the database at the time the backup was created.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">When backups should be created</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            For this school project, backups are created manually by the developer. The recommended moments are:
+          </p>
+          <ul class="mt-3 space-y-1 text-sm text-ink-600 dark:text-ink-300 list-disc list-inside">
+            <li>before running data import scripts that could change a lot of records</li>
+            <li>before testing changes to the data model or adding seed data</li>
+            <li>before any change that is hard to undo</li>
+          </ul>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Where backups are stored</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Backups are stored locally in the <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">backups/</span> folder
+            at the root of the project. This folder is listed in <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">.gitignore</span> so
+            the backup files are never committed to the repository. Backups can contain email addresses and password hashes,
+            so they should not end up in version control.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Restore strategy</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            If the database is in a broken state, a developer picks the most recent good backup from the
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">backups/</span> folder and runs
+            the restore script with that path. The <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">--drop</span> flag
+            in <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">mongorestore</span> clears the existing collections first and then
+            writes the backup data, so there are no conflicts with old documents.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Risks</h3>
+          <ul class="space-y-2 text-sm text-ink-600 dark:text-ink-300 list-disc list-inside">
+            <li>Local backups are stored on the same machine as the database. If the machine or disk fails, both the database and the backups are lost.</li>
+            <li>Backup files contain sensitive user data like emails and password hashes. They should never be committed or shared.</li>
+            <li>Restore with <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">--drop</span> deletes the current database before writing the backup. There is no undo after this step.</li>
+            <li>Every backup is a full copy of the database. For large datasets, this takes more time and storage than incremental approaches.</li>
+          </ul>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">What would need to change for production</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+            The current setup is good enough for a school project, but it would not be acceptable for a real production app.
+            These improvements would be needed:
+          </p>
+          <ul class="space-y-2 text-sm text-ink-600 dark:text-ink-300 list-disc list-inside">
+            <li>Scheduled backups running automatically, for example once per day</li>
+            <li>External storage for backup files, like an S3 bucket or a managed backup service</li>
+            <li>Encryption for backup files, because they contain personal data</li>
+            <li>A retention policy that keeps the last N backups and deletes older ones</li>
+            <li>Regular restore tests to check that backups are not corrupted and can actually be used</li>
+          </ul>
+        </Card>
+      </div>
+    </section>
+
+    <!-- Competency proof -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Competency proof</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Here is a summary of where each competency is shown in the project.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Competency</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">How it is shown in FlowBoard</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Files</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              {competencyProof.map((c) => (
+                <tr>
+                  <td class="py-4 pr-6 align-top">
+                    <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">
+                      {c.code}
+                    </span>
+                  </td>
+                  <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">{c.summary}</td>
+                  <td class="py-4 align-top">
+                    <div class="space-y-1">
+                      {c.files.map((f) => (
+                        <p class="text-xs font-mono text-ink-500 dark:text-ink-400">{f}</p>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+  </div>
+</AppLayout>

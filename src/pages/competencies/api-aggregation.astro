@@ -1,0 +1,313 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+---
+
+<AppLayout>
+  <div class="max-w-5xl mx-auto space-y-10">
+
+    <!-- Page header -->
+    <div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-white mb-2">API and Aggregation</h1>
+      <p class="text-ink-500 dark:text-ink-400">Modul 165 &mdash; Competencies G1F and G1E</p>
+    </div>
+
+    <!-- Intro -->
+    <Card>
+      <h2 class="text-xl font-semibold text-ink-900 dark:text-white mb-3">About this page</h2>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+        In FlowBoard the frontend does not talk to MongoDB directly. The app uses server-side code and API routes.
+        This is better because the database connection and permissions stay on the backend. The browser never
+        gets direct access to the database, which keeps things secure and easy to control.
+      </p>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed">
+        This page explains how the database connection works, how the stats endpoint uses MongoDB Aggregation
+        Pipeline to compute project statistics, and how both competencies G1F and G1E are covered in FlowBoard.
+      </p>
+    </Card>
+
+    <!-- G1F -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">G1F</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Connecting to a NoSQL database</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          How FlowBoard talks to MongoDB through server-side code and API routes.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">The database connection</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+            The MongoDB connection lives in <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">src/lib/db/mongo.ts</span>.
+            It uses a singleton pattern so only one connection pool is created, even when the dev server reloads.
+            Any part of the backend that needs the database calls <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">getDb()</span> and gets
+            back the MongoDB <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">Db</span> instance. Nothing client-side can do this.
+          </p>
+          <div class="bg-ink-900 dark:bg-ink-950 rounded-2xl p-4 font-mono text-xs text-green-300 overflow-x-auto">
+            <p class="text-ink-400 mb-1">// src/lib/db/mongo.ts</p>
+            <p>export async function <span class="text-yellow-300">getDb</span>(): Promise&lt;Db&gt; {"{"}</p>
+            <p class="ml-4">if (db && client) return db;</p>
+            <p class="ml-4">client = new MongoClient(MONGODB_URI);</p>
+            <p class="ml-4">await client.connect();</p>
+            <p class="ml-4">db = client.db(MONGODB_DB);</p>
+            <p class="ml-4">return db;</p>
+            <p>{"}"}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Repository layer</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Each MongoDB collection has a matching repository file in <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">src/lib/repositories/</span>.
+            Repositories call <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">getDb()</span> and run typed queries against MongoDB.
+            Services call repositories to get or write data. API routes call services. This layered approach keeps
+            the database logic separate from the HTTP layer.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">The stats endpoint</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+            The stats endpoint is a GET route that returns project statistics as JSON. It requires an authenticated
+            user and checks that the user has access to the project before running any database query.
+          </p>
+          <div class="flex items-center gap-3 bg-surface-100 dark:bg-ink-800 rounded-2xl px-4 py-3">
+            <span class="text-xs font-bold font-mono bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-1 rounded">GET</span>
+            <span class="font-mono text-sm text-ink-800 dark:text-ink-200">/api/projects/[projectId]/stats</span>
+          </div>
+          <p class="text-xs text-ink-500 dark:text-ink-400 mt-3">
+            File: <span class="font-mono">src/pages/api/projects/[projectId]/stats.ts</span>
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">How the endpoint validates the request</h3>
+          <div class="space-y-2 text-sm text-ink-600 dark:text-ink-300">
+            {[
+              { step: "1", label: "requireApiUser()", text: "Checks the session cookie. Returns 401 if the user is not logged in." },
+              { step: "2", label: "ObjectId.isValid()", text: "Validates that the projectId in the URL is a proper MongoDB ObjectId. Returns 400 if not." },
+              { step: "3", label: "requireProjectAccess()", text: "Checks that the user is a member or owner of the project. Returns 403 if not." },
+              { step: "4", label: "ProjectStatsRepo.getStats()", text: "Runs the aggregation pipeline and returns the stats as JSON." },
+            ].map(({ step, label, text }) => (
+              <div class="flex gap-3">
+                <span class="w-6 h-6 rounded-full bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 text-xs font-bold flex items-center justify-center flex-none">{step}</span>
+                <div>
+                  <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded mr-2">{label}</span>
+                  <span>{text}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+      </div>
+    </section>
+
+    <!-- G1E -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">G1E</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Aggregation as parallel processing</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          How MongoDB Aggregation Pipeline replaces the older MapReduce approach.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">MapReduce vs Aggregation Pipeline</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+            Older MongoDB examples often use MapReduce to process and summarize data. MapReduce works by
+            running a map function on every document to emit key-value pairs, and then a reduce function
+            to combine the values for the same key. The idea is that these steps can run in parallel
+            across many documents or even across multiple database nodes.
+          </p>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            In FlowBoard, Aggregation Pipeline is used instead. It is the more modern approach for MongoDB
+            and fits the use case much better. The pipeline runs the data through a series of stages
+            inside MongoDB, which means the heavy lifting happens in the database and not in the Node.js process.
+            The result is the same idea as MapReduce: filter, group, and summarize data without loading
+            every raw document into application memory.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">How the pipeline works in the stats query</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-4">
+            The stats repository uses a single aggregation with <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">$facet</span>.
+            This lets MongoDB run all the grouping operations in parallel inside the database,
+            using only one round trip from the server.
+          </p>
+
+          <div class="space-y-3">
+            {[
+              {
+                stage: "$match",
+                color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
+                text: "Filters the issues collection down to only the issues that belong to the requested project. This is the first thing the pipeline does, so MongoDB does not process documents from other projects at all.",
+              },
+              {
+                stage: "$facet",
+                color: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
+                text: "Runs multiple sub-pipelines in parallel. Each sub-pipeline is an independent aggregation on the filtered documents. This is where the parallel processing happens.",
+              },
+              {
+                stage: "$group",
+                color: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300",
+                text: "Inside each sub-pipeline, $group combines documents that share the same field value and counts them. For example, it groups all issues with priority \"High\" together and produces { priority: \"High\", count: 3 }.",
+              },
+              {
+                stage: "$project",
+                color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300",
+                text: "Shapes the output of each group stage into a clean format before sending it back to the application.",
+              },
+              {
+                stage: "$sort",
+                color: "bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300",
+                text: "Orders the results by count, highest first, so the most common values appear at the top of each group.",
+              },
+            ].map(({ stage, color, text }) => (
+              <div class="flex gap-3">
+                <span class:list={["text-xs font-bold font-mono px-2 py-1 rounded flex-none h-fit mt-0.5", color]}>{stage}</span>
+                <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">{text}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-3">Why not just count in the app?</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/40 rounded-2xl p-4">
+              <p class="text-sm font-semibold text-red-700 dark:text-red-400 mb-2">Without aggregation</p>
+              <p class="text-xs text-ink-600 dark:text-ink-300 leading-relaxed">
+                Load all issues for the project into memory, then loop over them in JavaScript to count by priority,
+                by list, by sprint, and by assignee. Four loops, all documents in memory,
+                and the result is the same as what MongoDB can compute directly.
+              </p>
+            </div>
+            <div class="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/40 rounded-2xl p-4">
+              <p class="text-sm font-semibold text-green-700 dark:text-green-400 mb-2">With aggregation</p>
+              <p class="text-xs text-ink-600 dark:text-ink-300 leading-relaxed">
+                MongoDB runs the grouping inside the database. The app receives only the summarized counts,
+                not the raw documents. One network round trip, no large payload, no in-memory counting.
+                The database is designed for exactly this kind of work.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+      </div>
+    </section>
+
+    <!-- Example result -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Example result</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          What the stats endpoint returns for a typical project.
+        </p>
+      </div>
+
+      <Card>
+        <div class="bg-ink-900 dark:bg-ink-950 rounded-2xl p-4 font-mono text-xs text-green-300 overflow-x-auto leading-relaxed">
+          <p>{"{"}</p>
+          <p class="ml-4"><span class="text-yellow-300">"totalIssues"</span>: <span class="text-blue-300">13</span>,</p>
+          <p class="ml-4"><span class="text-yellow-300">"byPriority"</span>: [</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"priority"</span>: <span class="text-green-400">"Medium"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">8</span> {" }"},</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"priority"</span>: <span class="text-green-400">"High"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">3</span> {" }"},</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"priority"</span>: <span class="text-green-400">"Low"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">2</span> {" }"}</p>
+          <p class="ml-4">],</p>
+          <p class="ml-4"><span class="text-yellow-300">"byList"</span>: [</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"listId"</span>: <span class="text-green-400">"&lt;uuid&gt;"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">5</span> {" }"},</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"listId"</span>: <span class="text-green-400">"&lt;uuid&gt;"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">4</span> {" }"},</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"listId"</span>: <span class="text-green-400">"&lt;uuid&gt;"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">4</span> {" }"}</p>
+          <p class="ml-4">],</p>
+          <p class="ml-4"><span class="text-yellow-300">"bySprint"</span>: [</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"sprintId"</span>: <span class="text-ink-400">null</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">7</span> {" }"},</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"sprintId"</span>: <span class="text-green-400">"67a1..."</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">6</span> {" }"}</p>
+          <p class="ml-4">],</p>
+          <p class="ml-4"><span class="text-yellow-300">"byAssignee"</span>: [</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"assignee"</span>: <span class="text-ink-400">null</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">5</span> {" }"},</p>
+          <p class="ml-8">{"{ "}<span class="text-yellow-300">"assignee"</span>: <span class="text-green-400">"selina@mogicato.ch"</span>, <span class="text-yellow-300">"count"</span>: <span class="text-blue-300">8</span> {" }"}</p>
+          <p class="ml-4">]</p>
+          <p>{"}"}</p>
+        </div>
+        <p class="text-xs text-ink-500 dark:text-ink-400 mt-3 italic">
+          The listId values are UUIDs because FlowBoard stores board lists as embedded documents inside the project.
+          A sprintId of null means the issue has not been assigned to any sprint yet.
+        </p>
+      </Card>
+    </section>
+
+    <!-- Competency proof -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Competency proof</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Where each competency is shown in the project.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Competency</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">How it is shown in FlowBoard</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Files</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              <tr>
+                <td class="py-4 pr-6 align-top">
+                  <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">G1F</span>
+                </td>
+                <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">
+                  MongoDB is connected through a server-side singleton. Repositories use this connection to
+                  read and write data. API routes call services and repositories. The stats endpoint returns
+                  MongoDB data as JSON, showing that the app is connected to a NoSQL database through an API.
+                </td>
+                <td class="py-4 align-top">
+                  <div class="space-y-1">
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/db/mongo.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/repositories/project-stats.repo.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/pages/api/projects/[projectId]/stats.ts</p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="py-4 pr-6 align-top">
+                  <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">G1E</span>
+                </td>
+                <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">
+                  MongoDB Aggregation Pipeline is used to group and count issue data inside the database.
+                  The $facet stage runs multiple groupings in parallel. Data is never loaded raw into
+                  application memory for counting. This is the modern equivalent of the MapReduce pattern.
+                </td>
+                <td class="py-4 align-top">
+                  <div class="space-y-1">
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/repositories/project-stats.repo.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/pages/api/projects/[projectId]/stats.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/pages/competencies/api-aggregation.astro</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+  </div>
+</AppLayout>

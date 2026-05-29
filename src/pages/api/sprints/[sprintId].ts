@@ -27,7 +27,7 @@ export const GET: APIRoute = async (context) => {
         headers: { 'Content-Type': 'application/json' }
     });
   } catch (error: any) {
-    if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
@@ -48,7 +48,7 @@ export const PATCH: APIRoute = async (context) => {
        return new Response(JSON.stringify({ error: 'Sprint not found' }), { status: 404 });
     }
     
-    await ProjectService.requireProjectAccess(sprint.projectId.toString(), userOrResponse._id.toString());
+    await ProjectService.requireProjectPermission(sprint.projectId.toString(), userOrResponse._id.toString(), 'sprints.manage');
 
     const body = await context.request.json();
     
@@ -72,7 +72,7 @@ export const PATCH: APIRoute = async (context) => {
     });
 
   } catch (error: any) {
-    if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
@@ -93,12 +93,12 @@ export const DELETE: APIRoute = async (context) => {
             return new Response(JSON.stringify({ error: 'Sprint not found' }), { status: 404 });
         }
         
-        await ProjectService.requireProjectAccess(sprint.projectId.toString(), userOrResponse._id.toString());
-        
+        await ProjectService.requireProjectPermission(sprint.projectId.toString(), userOrResponse._id.toString(), 'sprints.manage');
+
         await SprintService.deleteSprint(sprintId);
         return new Response(null, { status: 204 });
     } catch (error: any) {
-        if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+        if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
     }
 };

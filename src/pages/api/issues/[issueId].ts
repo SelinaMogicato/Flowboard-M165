@@ -1,11 +1,14 @@
 
-import { ObjectId } from 'mongodb';
-import { getDb } from '../../../lib/db/mongo';
 import { IssueRepo } from '../../../lib/repositories/issue.repo';
+import { ProjectService } from '../../../lib/services/project.service';
+import { requireApiUser } from '../../../lib/auth/guards';
 import type { APIRoute } from 'astro';
 
-export const GET: APIRoute = async ({ params, request }) => {
-  const { issueId } = params;
+export const GET: APIRoute = async (context) => {
+  const userOrResponse = await requireApiUser(context);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  const { issueId } = context.params;
 
   if (!issueId) {
     return new Response(JSON.stringify({ error: 'Issue ID required' }), { status: 400 });
@@ -16,28 +19,38 @@ export const GET: APIRoute = async ({ params, request }) => {
     if (!issue) {
       return new Response(JSON.stringify({ error: 'Issue not found' }), { status: 404 });
     }
+
+    await ProjectService.requireProjectAccess(issue.projectId.toString(), userOrResponse._id!.toString());
+
     return new Response(JSON.stringify(issue), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
   }
 };
 
-export const PATCH: APIRoute = async ({ params, request }) => {
-  const { issueId } = params;
-  
-  // Basic auth check simulation - in real app use middleware/session
-  // const user = await getUser(request);
-  // if (!user) return new Response('Unauthorized', { status: 401 });
+export const PATCH: APIRoute = async (context) => {
+  const userOrResponse = await requireApiUser(context);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  const { issueId } = context.params;
 
   if (!issueId) {
     return new Response(JSON.stringify({ error: 'Issue ID required' }), { status: 400 });
   }
 
   try {
-    const body = await request.json();
+    const issue = await IssueRepo.findById(issueId);
+    if (!issue) {
+      return new Response(JSON.stringify({ error: 'Issue not found' }), { status: 404 });
+    }
+
+    await ProjectService.requireProjectPermission(issue.projectId.toString(), userOrResponse._id!.toString(), 'issues.update');
+
+    const body = await context.request.json();
     const { title, description, priority, labels } = body;
 
     const updates: any = {};
@@ -66,20 +79,32 @@ export const PATCH: APIRoute = async ({ params, request }) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
-    console.error('Update error:', error);
+  } catch (error: any) {
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    }
     return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
   }
 };
 
-export const DELETE: APIRoute = async ({ params, request }) => {
-  const { issueId } = params;
+export const DELETE: APIRoute = async (context) => {
+  const userOrResponse = await requireApiUser(context);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  const { issueId } = context.params;
 
   if (!issueId) {
     return new Response(JSON.stringify({ error: 'Issue ID required' }), { status: 400 });
   }
 
   try {
+    const issue = await IssueRepo.findById(issueId);
+    if (!issue) {
+      return new Response(JSON.stringify({ error: 'Issue not found' }), { status: 404 });
+    }
+
+    await ProjectService.requireProjectPermission(issue.projectId.toString(), userOrResponse._id!.toString(), 'issues.delete');
+
     const success = await IssueRepo.delete(issueId);
     if (!success) {
       return new Response(JSON.stringify({ error: 'Issue not found' }), { status: 404 });
@@ -89,8 +114,10 @@ export const DELETE: APIRoute = async ({ params, request }) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
-    console.error('Delete error:', error);
+  } catch (error: any) {
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    }
     return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
   }
 };

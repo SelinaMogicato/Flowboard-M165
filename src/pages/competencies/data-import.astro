@@ -1,0 +1,435 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+import { ProjectService } from "../../lib/services/project.service";
+import { ImportRepo } from "../../lib/repositories/import.repo";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const projects = await ProjectService.getAllProjects(false, user._id!.toString());
+const recentLogs = await ImportRepo.findRecentImportLogs(8);
+
+const VALIDATION_PROBLEMS = [
+  {
+    problem: "Invalid ObjectId for projectId",
+    example: '"projectId": "not-an-id"',
+    solution: "The service checks ObjectId.isValid() before any database call. The row is skipped with a clear error message.",
+  },
+  {
+    problem: "Missing or empty title",
+    example: '"title": ""',
+    solution: "Title is required. If it is missing or blank, the row is skipped and reported in the error list.",
+  },
+  {
+    problem: "Wrong priority value",
+    example: '"priority": "Urgent"',
+    solution: 'Priority must be Low, Medium or High. Any other value causes the row to be skipped.',
+  },
+  {
+    problem: "listId does not exist in the project",
+    example: '"listId": "some-random-id"',
+    solution: "The service checks project.lists for the given listId. If it is missing, the row is skipped.",
+  },
+  {
+    problem: "sprintId points to a missing sprint",
+    example: '"sprintId": "64f000000000000000000001"',
+    solution: "If sprintId is given but not found in the database, the row is skipped with an error.",
+  },
+  {
+    problem: "Duplicate issue",
+    example: '"title": "Set up project structure" (already exists in this list)',
+    solution: "The service checks for existing issues with the same title and listId before inserting. Duplicates are skipped.",
+  },
+  {
+    problem: "Assignee not in project",
+    example: '"assignee": "64f000000000000000000002"',
+    solution: "If assignee is provided, the service checks if they are a project member. Non-members are rejected per row.",
+  },
+];
+
+const statusColor: Record<string, string> = {
+  success: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  partial: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+};
+---
+
+<AppLayout>
+  <div class="max-w-5xl mx-auto space-y-10">
+
+    <!-- Page header -->
+    <div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-white mb-2">Data Import</h1>
+      <p class="text-ink-500 dark:text-ink-400">Modul 165 &mdash; Competencies C1F and C1E</p>
+    </div>
+
+    <!-- Intro -->
+    <Card>
+      <h2 class="text-xl font-semibold text-ink-900 dark:text-white mb-3">About this page</h2>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed">
+        On this page I explain how I import data into MongoDB in FlowBoard. I used this to cover C1F and C1E.
+        The important part is not only inserting data, but also checking if the data makes sense before it is saved.
+        If a row has a missing title, a wrong priority, or a listId that does not exist, the import should not crash.
+        It should skip that row, record what went wrong, and continue with the rest.
+      </p>
+    </Card>
+
+    <!-- C1F -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">C1F</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Importing data into MongoDB</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          FlowBoard has two ways to import demo data into MongoDB.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Terminal seed script</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+            The seed script at
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1.5 py-0.5 rounded">scripts/seed-demo-data.ts</span>
+            can be run from the terminal. It creates a demo user, demo project, demo sprint, and 10 demo issues.
+            Running it multiple times is safe because it skips anything that already exists.
+          </p>
+          <div class="bg-ink-800 rounded-2xl px-4 py-3">
+            <code class="text-sm text-green-300 font-mono">npm run db:seed</code>
+          </div>
+          <p class="text-xs text-ink-400 dark:text-ink-500 mt-3">
+            Each run writes an import log to the <span class="font-mono">imports</span> collection so you can see what happened.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">In-app import button</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+            You can also trigger a demo import from here. It calls the API endpoint at
+            <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1.5 py-0.5 rounded">POST /api/import/demo</span>.
+            Pick an existing project or leave it blank to let the system create a new demo project.
+          </p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-ink-500 block mb-1.5" for="project-select">
+                Target project (optional)
+              </label>
+              <select
+                id="project-select"
+                class="w-full text-sm rounded-2xl border-none ring-1 ring-ink-100 dark:ring-ink-700 bg-white dark:bg-ink-800 dark:text-white focus:ring-2 focus:ring-peach-300 outline-none px-3 py-2 shadow-sm"
+              >
+                <option value="">Create new demo project</option>
+                {projects.map((p: any) => (
+                  <option value={p._id.toString()}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              id="import-btn"
+              class="w-full text-sm font-semibold bg-peach-fog text-white px-4 py-2.5 rounded-2xl hover:opacity-90 transition-opacity"
+            >
+              Run demo import
+            </button>
+
+            <div id="import-result" class="hidden text-sm rounded-2xl p-3"></div>
+          </div>
+        </Card>
+
+      </div>
+
+      <Card>
+        <h3 class="font-semibold text-ink-900 dark:text-white mb-3">What gets imported</h3>
+        <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-3">
+          The demo import inserts 10 issues into the target project's Backlog list.
+          Each issue has a title, description, and priority. These are the same issues the seed script creates.
+          If an issue with the same title already exists in the list, it is skipped automatically.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {[
+            { title: "Set up project structure", priority: "High" },
+            { title: "Design the database schema", priority: "High" },
+            { title: "Create login page", priority: "Medium" },
+            { title: "Add user registration", priority: "Medium" },
+            { title: "Implement Kanban board", priority: "High" },
+            { title: "Add sprint planning view", priority: "Medium" },
+            { title: "Write unit tests", priority: "Low" },
+            { title: "Fix navigation bug on mobile", priority: "Low" },
+            { title: "Deploy to staging environment", priority: "Medium" },
+            { title: "Write project documentation", priority: "Low" },
+          ].map(({ title, priority }) => (
+            <div class="flex items-center gap-2 text-sm">
+              <span class:list={[
+                "text-xs px-2 py-0.5 rounded font-medium flex-none",
+                priority === "High" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                priority === "Medium" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                "bg-surface-200 text-ink-500 dark:bg-ink-700 dark:text-ink-400"
+              ]}>
+                {priority}
+              </span>
+              <span class="text-ink-700 dark:text-ink-300 truncate">{title}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </section>
+
+    <!-- C1E -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">C1E</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Recognising import problems</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Real import data is often messy. These are the problems the import service handles
+          and how each one is solved.
+        </p>
+      </div>
+
+      <Card>
+        <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-5">
+          The key idea is that the service should never crash because of one bad row. It validates
+          every row individually, collects all errors, skips invalid rows, and continues inserting the valid ones.
+          At the end, it writes a summary to the <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1.5 py-0.5 rounded">imports</span> collection
+          so the result is traceable.
+        </p>
+
+        <div class="space-y-3">
+          {VALIDATION_PROBLEMS.map(({ problem, example, solution }) => (
+            <div class="border border-ink-100 dark:border-ink-700 rounded-2xl p-4">
+              <div class="flex items-start gap-3">
+                <div class="w-1.5 h-1.5 rounded-full bg-red-400 flex-none mt-2"></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-ink-800 dark:text-ink-200 mb-1">{problem}</p>
+                  <p class="text-xs font-mono bg-surface-200 dark:bg-ink-700 text-ink-600 dark:text-ink-300 px-2.5 py-1.5 rounded-xl mb-2 break-all">{example}</p>
+                  <div class="flex items-start gap-2">
+                    <div class="w-1.5 h-1.5 rounded-full bg-green-400 flex-none mt-1.5"></div>
+                    <p class="text-sm text-ink-600 dark:text-ink-300">{solution}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div class="mt-5 pt-5 border-t border-ink-100 dark:border-ink-700">
+          <p class="text-sm font-semibold text-ink-800 dark:text-ink-200 mb-2">How the service works step by step:</p>
+          <ol class="space-y-1.5 list-decimal list-inside text-sm text-ink-600 dark:text-ink-300">
+            <li>Check format: ObjectId validity, required fields, allowed values</li>
+            <li>Check database: project exists, listId is in the project, sprint exists, assignee is a member</li>
+            <li>Check duplicates: same title and listId in the same project</li>
+            <li>If any check fails: record the error, increment skippedRows, move to the next row</li>
+            <li>If all checks pass: insert the issue, increment insertedRows</li>
+            <li>After all rows: write an import log with the full summary</li>
+          </ol>
+        </div>
+      </Card>
+    </section>
+
+    <!-- Import Log -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Import Log</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Every import run writes a document to the <span class="font-mono text-sm">imports</span> collection.
+          This makes it easy to see what happened during each import and to prove which rows were inserted and which were skipped.
+        </p>
+      </div>
+
+      <Card>
+        <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-5">
+          Each import log contains the type, status, the number of rows processed, how many were inserted,
+          how many were skipped, and a full list of validation errors per row. The
+          <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1.5 py-0.5 rounded">importedBy</span>
+          field references the user who triggered the import.
+        </p>
+
+        <div class="bg-ink-900 rounded-2xl p-4 mb-5 overflow-x-auto">
+          <pre class="text-xs text-green-300 font-mono leading-relaxed whitespace-pre">{`{
+  type: "demo-issues",
+  status: "partial",
+  importedBy: ObjectId("..."),
+  totalRows: 10,
+  insertedRows: 8,
+  skippedRows: 2,
+  errors: [
+    {
+      row: 3,
+      field: "priority",
+      message: "Priority must be Low, Medium or High."
+    }
+  ],
+  createdAt: ISODate("...")
+}`}</pre>
+        </div>
+
+        {recentLogs.length === 0 ? (
+          <p class="text-sm text-ink-400 dark:text-ink-500 text-center py-4 italic">
+            No import logs yet. Run a demo import or the seed script to see logs here.
+          </p>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-ink-100 dark:border-ink-700">
+                  <th class="text-left py-3 pr-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Type</th>
+                  <th class="text-left py-3 pr-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Status</th>
+                  <th class="text-left py-3 pr-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Rows</th>
+                  <th class="text-left py-3 pr-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Inserted</th>
+                  <th class="text-left py-3 pr-4 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Skipped</th>
+                  <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Date</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+                {recentLogs.map((log) => (
+                  <tr>
+                    <td class="py-3 pr-4 font-mono text-ink-700 dark:text-ink-300 text-xs">{log.type}</td>
+                    <td class="py-3 pr-4">
+                      <span class:list={["text-xs font-medium px-2.5 py-1 rounded-full", statusColor[log.status] || "bg-surface-200 text-ink-500"]}>
+                        {log.status}
+                      </span>
+                    </td>
+                    <td class="py-3 pr-4 text-ink-600 dark:text-ink-300">{log.totalRows}</td>
+                    <td class="py-3 pr-4 text-green-700 dark:text-green-400 font-medium">{log.insertedRows}</td>
+                    <td class="py-3 pr-4 text-amber-700 dark:text-amber-400 font-medium">{log.skippedRows}</td>
+                    <td class="py-3 text-ink-400 dark:text-ink-500 text-xs">
+                      {new Date(log.createdAt).toLocaleString('en-CH', { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </section>
+
+    <!-- Competency proof -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Competency proof</h2>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Competency</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">How it is shown in FlowBoard</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Relevant files</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              <tr>
+                <td class="py-4 pr-6 align-top">
+                  <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">C1F</span>
+                </td>
+                <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">
+                  Demo data can be imported into MongoDB using a seed script from the terminal or via the API endpoint
+                  on this page. Both methods use the existing MongoDB connection and repositories.
+                </td>
+                <td class="py-4 align-top">
+                  <div class="space-y-1">
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">scripts/seed-demo-data.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/pages/api/import/demo.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/repositories/import.repo.ts</p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="py-4 pr-6 align-top">
+                  <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">C1E</span>
+                </td>
+                <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">
+                  The import service validates every row before inserting it. Invalid rows are skipped with
+                  a specific error message. The import does not stop on the first error. All problems are
+                  collected and saved in an import log document in the imports collection.
+                </td>
+                <td class="py-4 align-top">
+                  <div class="space-y-1">
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/services/import.service.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/repositories/import.repo.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">imports collection (MongoDB)</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+  </div>
+</AppLayout>
+
+<script>
+  const importBtn = document.getElementById("import-btn") as HTMLButtonElement | null;
+  const projectSelect = document.getElementById("project-select") as HTMLSelectElement | null;
+  const resultBox = document.getElementById("import-result") as HTMLDivElement | null;
+
+  importBtn?.addEventListener("click", async () => {
+    if (!importBtn || !resultBox) return;
+
+    importBtn.disabled = true;
+    importBtn.textContent = "Importing...";
+    resultBox.className = "hidden";
+
+    try {
+      const projectId = projectSelect?.value || "";
+      const res = await fetch("/api/import/demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(projectId ? { projectId } : {}),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        const hasErrors = data.errors && data.errors.length > 0;
+        resultBox.className = [
+          "text-sm rounded-2xl p-3",
+          data.status === "success"
+            ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800"
+            : data.status === "partial"
+            ? "bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+            : "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800",
+        ].join(" ");
+
+        let html = `<p class="font-semibold mb-1">Import ${data.status}</p>`;
+        html += `<p>Inserted: ${data.insertedRows} &nbsp; Skipped: ${data.skippedRows}</p>`;
+
+        if (hasErrors) {
+          html += `<p class="mt-2 font-medium">Errors:</p><ul class="mt-1 space-y-1 list-disc list-inside">`;
+          for (const e of data.errors.slice(0, 5)) {
+            html += `<li>Row ${e.row} (${e.field}): ${e.message}</li>`;
+          }
+          if (data.errors.length > 5) {
+            html += `<li>... and ${data.errors.length - 5} more</li>`;
+          }
+          html += `</ul>`;
+        }
+
+        resultBox.innerHTML = html;
+
+        // Reload the page after a short delay to refresh the import log table
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        resultBox.className =
+          "text-sm rounded-2xl p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800";
+        resultBox.textContent = `Error: ${data.error || "Import failed"}`;
+      }
+    } catch (err) {
+      resultBox.className =
+        "text-sm rounded-2xl p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800";
+      resultBox.textContent = "Network error. Check the console.";
+      console.error(err);
+    } finally {
+      importBtn.disabled = false;
+      importBtn.textContent = "Run demo import";
+    }
+  });
+</script>

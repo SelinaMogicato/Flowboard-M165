@@ -43,6 +43,29 @@ export async function findUserById(id: string | ObjectId): Promise<User | null> 
   return db.collection<User>(COLLECTION).findOne({ _id });
 }
 
+export async function searchUsers(query = '', limit = 10): Promise<Array<Pick<User, '_id' | 'email' | 'name'>>> {
+  const db = await getDb();
+  const trimmedQuery = query.trim();
+  const safeLimit = Math.max(1, Math.min(limit, 25));
+
+  const filter = trimmedQuery
+    ? {
+        $or: [
+          { email: { $regex: trimmedQuery, $options: 'i' } },
+          { name: { $regex: trimmedQuery, $options: 'i' } },
+        ],
+      }
+    : {};
+
+  return db
+    .collection<User>(COLLECTION)
+    .find(filter)
+    .project({ _id: 1, email: 1, name: 1 })
+    .sort({ email: 1 })
+    .limit(safeLimit)
+    .toArray() as Promise<Array<Pick<User, '_id' | 'email' | 'name'>>>;
+}
+
 export async function updateUserName(id: string | ObjectId, name: string): Promise<boolean> {
   const db = await getDb();
   const _id = typeof id === 'string' ? new ObjectId(id) : id;

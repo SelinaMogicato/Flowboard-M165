@@ -1,5 +1,6 @@
 import { ProjectMemberRepo } from '../repositories/project-member.repo';
 import { findUserByEmail } from '../repositories/user.repo';
+import { requirePermission } from '../auth/permissions';
 import { ObjectId } from 'mongodb';
 
 export const ProjectMemberService = {
@@ -40,8 +41,9 @@ export const ProjectMemberService = {
     }
 
     // Check permission
-    const isOwner = await ProjectMemberRepo.isProjectOwner(projectId, currentUserId);
-    if (!isOwner) throw new Error('Only owners can add members');
+    const currentMember = await ProjectMemberRepo.getMember(projectId, currentUserId);
+    if (!currentMember) throw new Error('Only owners can add members');
+    requirePermission(currentMember.role, 'members.manage');
 
     const userToAdd = await findUserByEmail(email);
     if (!userToAdd) throw new Error('User not found');
@@ -59,8 +61,9 @@ export const ProjectMemberService = {
   },
 
   async removeMember(projectId: string, targetUserId: string, currentUserId: string) {
-    const isOwner = await ProjectMemberRepo.isProjectOwner(projectId, currentUserId);
-    if (!isOwner) throw new Error('Only owners can remove members');
+    const currentMember = await ProjectMemberRepo.getMember(projectId, currentUserId);
+    if (!currentMember) throw new Error('Only owners can remove members');
+    requirePermission(currentMember.role, 'members.manage');
     
     if (targetUserId === currentUserId) {
         // Check if there are other owners

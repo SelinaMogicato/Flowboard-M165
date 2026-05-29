@@ -8,6 +8,9 @@
     "preview": "astro preview",
     "astro": "astro",
     "db:indexes": "tsx src/lib/db/indexes.ts",
+    "db:seed": "tsx scripts/seed-demo-data.ts",
+    "db:backup": "bash scripts/db-backup.sh",
+    "db:restore": "bash scripts/db-restore.sh",
     "auth:create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {

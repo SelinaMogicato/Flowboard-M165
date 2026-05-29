@@ -1,0 +1,368 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import Card from "../../components/ui/Card.astro";
+import { mongoCollections, mongoIndexes } from "../../lib/db/schema-docs";
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const strategyLabel: Record<string, string> = {
+  embedded: "Embedded",
+  referenced: "Referenced",
+  mixed: "Mixed",
+};
+
+const strategyColor: Record<string, string> = {
+  embedded: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  referenced: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  mixed: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+};
+---
+
+<AppLayout>
+  <div class="max-w-5xl mx-auto space-y-10">
+
+    <!-- Page header -->
+    <div>
+      <h1 class="text-3xl font-bold text-ink-900 dark:text-white mb-2">NoSQL Data Model</h1>
+      <p class="text-ink-500 dark:text-ink-400">Modul 165 &mdash; Competencies B1F and B1E</p>
+    </div>
+
+    <!-- Intro -->
+    <Card>
+      <h2 class="text-xl font-semibold text-ink-900 dark:text-white mb-3">About this page</h2>
+      <p class="text-ink-600 dark:text-ink-300 leading-relaxed">
+        This page explains how I used MongoDB in FlowBoard and how the data model is built.
+        The goal is to show the two competencies B1F and B1E from Modul 165.
+        I did not create a separate demo database for this because FlowBoard already works
+        with a real MongoDB structure that has proper collections, relationships, and indexes.
+        Everything shown here is the actual database that powers this app.
+      </p>
+    </Card>
+
+    <!-- B1F -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">B1F</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Implementing a given NoSQL data model</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          FlowBoard uses six MongoDB collections. Each one has a clear purpose and defined fields.
+          Here is a breakdown of all of them.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {mongoCollections.map((col) => (
+          <Card>
+            <div class="flex items-start justify-between mb-3">
+              <h3 class="text-lg font-semibold text-ink-900 dark:text-white font-mono">{col.name}</h3>
+              <span class:list={["text-xs font-medium px-2.5 py-1 rounded-full", strategyColor[col.strategy]]}>
+                {strategyLabel[col.strategy]}
+              </span>
+            </div>
+            <p class="text-sm text-ink-600 dark:text-ink-300 mb-3">{col.purpose}</p>
+            <div class="mb-3">
+              <p class="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-ink-500 mb-1.5">Important fields</p>
+              <div class="flex flex-wrap gap-1.5">
+                {col.fields.map((f) => (
+                  <span class="text-xs bg-surface-200 dark:bg-ink-700 text-ink-700 dark:text-ink-300 px-2 py-0.5 rounded font-mono">{f}</span>
+                ))}
+              </div>
+            </div>
+            <div class="mb-3">
+              <p class="text-xs font-semibold uppercase tracking-wide text-ink-400 dark:text-ink-500 mb-1">References</p>
+              <p class="text-sm text-ink-600 dark:text-ink-300">{col.references}</p>
+            </div>
+            <div class="pt-3 border-t border-ink-100 dark:border-ink-700">
+              <p class="text-xs text-ink-500 dark:text-ink-400 italic">{col.strategyNote}</p>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
+
+    <!-- B1E -->
+    <section>
+      <div class="mb-5">
+        <span class="inline-block text-xs font-semibold uppercase tracking-widest text-peach-600 mb-1">B1E</span>
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Designing a NoSQL data model</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          These are the design decisions I made when thinking about how the data should be structured.
+          Most of it comes down to the question: should something be embedded inside another document,
+          or should it live in its own collection?
+        </p>
+      </div>
+
+      <div class="space-y-4">
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why <span class="font-mono text-peach-600">project.lists</span> is embedded</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Board lists (like "To Do", "In Progress", "Done") are embedded directly inside each project document.
+            This makes sense because a list only ever belongs to one project. They are also small - usually just
+            a name and an ID - and they are always needed when you open a board. If lists were a separate collection,
+            every board load would need an extra query for almost no benefit. Embedding them is the simpler and
+            more efficient choice here.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why <span class="font-mono text-peach-600">issues</span> are in their own collection</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Issues are the most active data in FlowBoard. They get created, updated, moved between lists,
+            assigned to sprints, filtered by priority and assignee, and searched by title. If issues were
+            embedded inside the project document, every single one of those operations would have to load
+            and rewrite the entire project document. That would get messy and slow very quickly. A separate
+            collection is the only practical choice for data that changes this often and independently.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why <span class="font-mono text-peach-600">projectMembers</span> is a separate collection</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            A user can be a member of multiple projects. A project can have multiple users. This is a
+            classic many-to-many relationship and the cleanest way to handle it in any database is a
+            junction collection. In FlowBoard, that is projectMembers. It also stores the role per
+            membership, which makes permission checks straightforward.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why <span class="font-mono text-peach-600">sprints</span> are a separate collection</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Sprints have their own lifecycle. They start as planned, get activated, and then get completed
+            or deleted. Issues can optionally be assigned to a sprint. If sprints were embedded inside the
+            project, updating a sprint status would mean updating the whole project document. It would also
+            be harder to query active sprints across the app. A separate collection keeps this clean.
+          </p>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold text-ink-900 dark:text-white mb-2">Why <span class="font-mono text-peach-600">sessions</span> are a separate collection</h3>
+          <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">
+            Sessions are temporary. They expire, they get revoked when a user logs out, and they should
+            be automatically cleaned up. None of that is user profile data. Keeping sessions separate means
+            the users collection stays simple and clean, and session cleanup can happen without touching
+            user documents at all. MongoDB's TTL index on the <span class="font-mono text-xs bg-surface-200 dark:bg-ink-700 px-1 py-0.5 rounded">expiresAt</span> field
+            handles automatic deletion.
+          </p>
+        </Card>
+
+      </div>
+    </section>
+
+    <!-- Embedding vs Referencing -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Embedding vs Referencing</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          A key decision in MongoDB schema design is whether to embed data inside a document
+          or reference it from another collection. FlowBoard uses both approaches depending on the situation.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        <Card>
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-2.5 h-2.5 rounded-full bg-green-500 flex-none"></span>
+            <h3 class="font-semibold text-ink-900 dark:text-white">Embedded</h3>
+          </div>
+          <div class="space-y-3">
+            <div class="bg-surface-200 dark:bg-ink-700 rounded-2xl p-3">
+              <p class="text-sm font-mono text-ink-800 dark:text-ink-200 font-medium mb-1">project.lists</p>
+              <p class="text-xs text-ink-500 dark:text-ink-400">
+                Small, project-specific structure. Always loaded with the project.
+                Does not need its own lifecycle or independent querying.
+              </p>
+            </div>
+          </div>
+          <p class="text-xs text-ink-400 dark:text-ink-500 mt-4 italic">
+            Embedding is good when the data is small, always needed together with the parent,
+            and does not change independently.
+          </p>
+        </Card>
+
+        <Card>
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-2.5 h-2.5 rounded-full bg-blue-500 flex-none"></span>
+            <h3 class="font-semibold text-ink-900 dark:text-white">Referenced</h3>
+          </div>
+          <div class="space-y-2">
+            {[
+              { ref: "issue.projectId", target: "projects" },
+              { ref: "issue.sprintId", target: "sprints" },
+              { ref: "issue.assignee", target: "users" },
+              { ref: "projectMembers.projectId", target: "projects" },
+              { ref: "projectMembers.userId", target: "users" },
+              { ref: "session.userId", target: "users" },
+            ].map(({ ref, target }) => (
+              <div class="flex items-center gap-2 text-sm">
+                <span class="font-mono text-peach-600 dark:text-peach-400 text-xs">{ref}</span>
+                <span class="text-ink-400 dark:text-ink-500">&rarr;</span>
+                <span class="font-mono text-ink-600 dark:text-ink-300 text-xs">{target}</span>
+              </div>
+            ))}
+          </div>
+          <p class="text-xs text-ink-400 dark:text-ink-500 mt-4 italic">
+            Referencing is better when the data can grow, is queried independently,
+            or has its own lifecycle separate from the parent.
+          </p>
+        </Card>
+
+      </div>
+    </section>
+
+    <!-- Indexes -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Indexes</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Indexes are important because FlowBoard often loads issues by project, list, or sprint.
+          Without indexes, MongoDB would need to scan more documents than necessary. For a small
+          demo this would not matter much, but for a real project board it is better to think about
+          this early. The indexes below are defined in
+          <a href="/src/lib/db/indexes.ts" class="text-peach-600 hover:underline font-mono text-sm">src/lib/db/indexes.ts</a>
+          and created on app startup.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Collection</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Fields</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Type</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Why it exists</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              {mongoIndexes.map((idx) => (
+                <tr>
+                  <td class="py-3 pr-6 font-mono text-ink-800 dark:text-ink-200 text-xs">{idx.collection}</td>
+                  <td class="py-3 pr-6 font-mono text-peach-600 dark:text-peach-400 text-xs">{idx.fields}</td>
+                  <td class="py-3 pr-6">
+                    <span class="text-xs bg-surface-200 dark:bg-ink-700 text-ink-600 dark:text-ink-300 px-2 py-0.5 rounded">{idx.type}</span>
+                  </td>
+                  <td class="py-3 text-ink-600 dark:text-ink-300">{idx.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+    <!-- Why MongoDB -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Why this model fits MongoDB</h2>
+      </div>
+
+      <Card>
+        <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed mb-4">
+          MongoDB is a good fit for FlowBoard, but not because it is always better than SQL.
+          A relational database would also work here. The reason MongoDB fits this project well
+          is mostly about the flexible document structure.
+        </p>
+
+        <div class="space-y-3">
+          {[
+            {
+              title: "Flexible fields",
+              text: "Issues have optional fields like sprintId and assignee. In SQL you would store NULL for those, which is fine, but in MongoDB you can just leave them out entirely. Labels are stored as an array inside the issue document, which is natural for a document database.",
+            },
+            {
+              title: "Embedded board lists",
+              text: "Storing the lists array inside the project document is a natural fit for MongoDB. You get the project and its board structure in one query. In a relational database you would need a join for that.",
+            },
+            {
+              title: "Project-based data shape",
+              text: "Most queries in FlowBoard are scoped to a project. Loading a board means getting everything for one project. MongoDB's document model works well for this kind of project-centric data access.",
+            },
+            {
+              title: "No fixed schema pressure",
+              text: "During development, I added fields to collections without worrying about migrations. MongoDB does not enforce a schema by default, which made iteration faster. In production I validate data in the application code instead.",
+            },
+            {
+              title: "SQL would also work",
+              text: "To be honest, a PostgreSQL schema with proper foreign keys would work fine too. The relationships in FlowBoard are not deeply nested, and the data is not particularly document-shaped. I chose MongoDB partly because it is what this module focuses on, and partly because the flexible structure suits the Kanban board format.",
+            },
+          ].map(({ title, text }) => (
+            <div class="flex gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-peach-400 flex-none mt-2"></span>
+              <div>
+                <p class="text-sm font-semibold text-ink-800 dark:text-ink-200 mb-0.5">{title}</p>
+                <p class="text-sm text-ink-600 dark:text-ink-300 leading-relaxed">{text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </section>
+
+    <!-- Competency proof -->
+    <section>
+      <div class="mb-5">
+        <h2 class="text-2xl font-bold text-ink-900 dark:text-white">Competency proof</h2>
+        <p class="text-ink-500 dark:text-ink-400 mt-1">
+          Here is a summary of where each competency is shown in the project.
+        </p>
+      </div>
+
+      <Card>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 dark:border-ink-700">
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Competency</th>
+                <th class="text-left py-3 pr-6 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">How it is shown in FlowBoard</th>
+                <th class="text-left py-3 font-semibold text-ink-500 dark:text-ink-400 text-xs uppercase tracking-wide">Relevant files</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-ink-50 dark:divide-ink-700">
+              <tr>
+                <td class="py-4 pr-6 align-top">
+                  <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">B1F</span>
+                </td>
+                <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">
+                  The given data model is implemented with MongoDB collections. Each collection maps to a repository file
+                  with typed queries. Indexes are defined and created on startup to support the expected query patterns.
+                </td>
+                <td class="py-4 align-top">
+                  <div class="space-y-1">
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/repositories/</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/db/indexes.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/db/mongo.ts</p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="py-4 pr-6 align-top">
+                  <span class="inline-block font-mono text-xs font-semibold bg-peach-100 dark:bg-peach-900/30 text-peach-700 dark:text-peach-300 px-2 py-1 rounded">B1E</span>
+                </td>
+                <td class="py-4 pr-6 text-ink-700 dark:text-ink-300 align-top leading-relaxed">
+                  The NoSQL data model is designed with a mix of embedded and referenced data.
+                  The decisions around what to embed and what to reference are explained and justified
+                  on this page and in the documentation file.
+                </td>
+                <td class="py-4 align-top">
+                  <div class="space-y-1">
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/pages/competencies/nosql-model.astro</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">src/lib/db/schema-docs.ts</p>
+                    <p class="text-xs font-mono text-ink-500 dark:text-ink-400">documentation/b1f-b1e-nosql-data-model.md</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </section>
+
+  </div>
+</AppLayout>

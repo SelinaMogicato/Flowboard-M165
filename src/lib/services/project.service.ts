@@ -4,6 +4,7 @@
 
 import { ProjectRepo, type Project, type ProjectList } from '../repositories/project.repo';
 import { ProjectMemberRepo } from '../repositories/project-member.repo';
+import { type Permission, requirePermission } from '../auth/permissions';
 import { ObjectId } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -69,10 +70,16 @@ export const ProjectService = {
   async requireProjectOwner(projectId: string, userId: string) {
     const project = await ProjectRepo.findById(projectId);
     if (!project) throw new Error('Project not found');
-    
+
     if (project.ownerId?.toString() !== userId) {
       throw new Error('Project ownership required');
     }
+  },
+
+  async requireProjectPermission(projectId: string, userId: string, permission: Permission) {
+    const member = await ProjectMemberRepo.getMember(projectId, userId);
+    if (!member) throw new Error('Project access denied');
+    requirePermission(member.role, permission);
   },
 
   async createProject(name: string, description?: string, repositoryUrl?: string, userId?: string) {

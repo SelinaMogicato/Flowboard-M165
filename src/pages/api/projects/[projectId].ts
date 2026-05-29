@@ -38,9 +38,9 @@ export const PATCH: APIRoute = async (context) => {
     const { projectId } = context.params;
     if (!projectId) return new Response(null, { status: 404 });
 
-    // Only owner can update project settings
+    // Only owner or admin can update project settings
     try {
-      await ProjectService.requireProjectOwner(projectId, userOrResponse._id.toString());
+      await ProjectService.requireProjectPermission(projectId, userOrResponse._id.toString(), 'project.update');
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), {
         status: 403,
@@ -81,9 +81,9 @@ export const DELETE: APIRoute = async (context) => {
     const { projectId } = context.params;
     if (!projectId) return new Response(null, { status: 404 });
 
-    // Only owner can delete project
+    // Only owner can delete project (project.delete is exclusive to owner)
     try {
-      await ProjectService.requireProjectOwner(projectId, userOrResponse._id.toString());
+      await ProjectService.requireProjectPermission(projectId, userOrResponse._id.toString(), 'project.delete');
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), {
         status: 403,

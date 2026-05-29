@@ -47,7 +47,7 @@ export const POST: APIRoute = async (context) => {
     await ProjectMemberService.addMemberByEmail(projectId, email, userOrResponse._id!.toString());
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (error: any) {
-    if (error.message.includes("Only owners")) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    if (error.message.includes("Only owners") || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
     if (error.message === 'User not found') return new Response(JSON.stringify({ error: "User not found" }), { status: 404 });
     return new Response(JSON.stringify({ error: error.message || "Failed to add member" }), { status: 500 });
   }
@@ -73,7 +73,7 @@ export const DELETE: APIRoute = async (context) => {
     await ProjectMemberService.removeMember(projectId, userId, userOrResponse._id!.toString());
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (error: any) {
-    if (error.message.includes("Only owners")) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    if (error.message.includes("Only owners") || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
     return new Response(JSON.stringify({ error: error.message || "Failed to remove member" }), { status: 500 });
   }
 };
