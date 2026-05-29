@@ -15,7 +15,7 @@ export const PUT: APIRoute = async (context) => {
   }
 
   try {
-    await ProjectService.requireProjectAccess(projectId, userOrResponse._id.toString());
+    await ProjectService.requireProjectPermission(projectId, userOrResponse._id.toString(), 'issues.update');
     const body = await context.request.json();
 
     // Check if this is a move operation
@@ -68,7 +68,7 @@ export const PUT: APIRoute = async (context) => {
     });
 
   } catch (error: any) {
-    if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
@@ -83,11 +83,11 @@ export const DELETE: APIRoute = async (context) => {
   }
 
   try {
-    await ProjectService.requireProjectAccess(projectId, userOrResponse._id.toString());
+    await ProjectService.requireProjectPermission(projectId, userOrResponse._id.toString(), 'issues.delete');
     await IssueService.deleteIssue(issueId);
     return new Response(null, { status: 204 });
   } catch (error: any) {
-    if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }

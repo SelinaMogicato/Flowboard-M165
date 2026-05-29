@@ -11,6 +11,8 @@ import Modal from "../../components/ui/Modal.astro";
 import ConfirmModal from "../../components/ui/ConfirmModal.astro";
 import Input from "../../components/ui/Input.astro";
 import { ProjectService } from "../../lib/services/project.service";
+import { ProjectMemberRepo } from "../../lib/repositories/project-member.repo";
+import { hasPermission } from "../../lib/auth/permissions";
 
 const user = Astro.locals.user;
 if (!user) {
@@ -22,6 +24,14 @@ const showArchived = url.searchParams.get("archived") === "true";
 const projects = await ProjectService.getAllProjects(
   showArchived,
   user._id!.toString(),
+);
+
+const canEditProject = new Map<string, boolean>();
+await Promise.all(
+  projects.map(async (project: any) => {
+    const member = await ProjectMemberRepo.getMember(project._id.toString(), user._id!.toString());
+    canEditProject.set(project._id.toString(), member ? hasPermission(member.role, "project.update") : false);
+  }),
 );
 ---
 
@@ -113,30 +123,32 @@ const projects = await ProjectService.getAllProjects(
                 <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-peach-100 to-peach-50 flex items-center justify-center text-peach-600 font-bold text-lg shadow-inner">
                   {project.name.charAt(0).toUpperCase()}
                 </div>
-                <button
-                  type="button"
-                  class="edit-project-btn opacity-0 group-hover:opacity-100 transition-opacity p-2 text-ink-400 hover:text-peach-600 dark:text-ink-500 dark:hover:text-peach-400 rounded-full hover:bg-peach-50 dark:hover:bg-ink-700 relative z-10"
-                  data-id={project._id}
-                  data-name={project.name}
-                  data-repo={project.repositoryUrl || ""}
-                  data-desc={project.description || ""}
-                  data-archived={project.isArchived ? "true" : "false"}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-5 w-5 pointer-events-none"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                {canEditProject.get(project._id.toString()) && (
+                  <button
+                    type="button"
+                    class="edit-project-btn opacity-0 group-hover:opacity-100 transition-opacity p-2 text-ink-400 hover:text-peach-600 dark:text-ink-500 dark:hover:text-peach-400 rounded-full hover:bg-peach-50 dark:hover:bg-ink-700 relative z-10"
+                    data-id={project._id}
+                    data-name={project.name}
+                    data-repo={project.repositoryUrl || ""}
+                    data-desc={project.description || ""}
+                    data-archived={project.isArchived ? "true" : "false"}
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5 pointer-events-none"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                      />
+                    </svg>
+                  </button>
+                )}
               </div>
 
               <h3 class="text-lg font-semibold text-ink-900 dark:text-white mb-2 truncate group-hover:text-peach-600 transition-colors">

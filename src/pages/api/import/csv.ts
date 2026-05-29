@@ -71,9 +71,10 @@ export const POST: APIRoute = async (context) => {
       return json({ error: 'Project not found. It may have been deleted.' }, 404);
     }
 
-    const hasAccess = await ProjectService.userCanAccessProject(projectId, user._id!.toString());
-    if (!hasAccess) {
-      return json({ error: 'You do not have access to this project.' }, 403);
+    try {
+      await ProjectService.requireProjectPermission(projectId, user._id!.toString(), 'issues.create');
+    } catch {
+      return json({ error: 'You do not have permission to import issues into this project.' }, 403);
     }
 
     if (!project.lists || project.lists.length === 0) {

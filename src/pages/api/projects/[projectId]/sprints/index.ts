@@ -35,12 +35,12 @@ export const POST: APIRoute = async (context) => {
   }
 
   try {
-    await ProjectService.requireProjectAccess(projectId, userOrResponse._id.toString());
+    await ProjectService.requireProjectPermission(projectId, userOrResponse._id.toString(), 'sprints.manage');
     const data = await context.request.json();
     const sprint = await SprintService.createSprint(projectId, data);
     return new Response(JSON.stringify(sprint), { status: 201 });
   } catch (error: any) {
-    if (error.message === 'Project access denied') return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    if (error.message === 'Project access denied' || error.message?.startsWith('Permission denied')) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     return new Response(JSON.stringify({ error: error.message }), { status: 400 });
   }
 };
