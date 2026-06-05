@@ -39,21 +39,12 @@ export interface ProjectStats {
 export const ProjectStatsRepo = {
   async getStats(projectId: string): Promise<ProjectStats> {
     const db = await getDb();
-
-    // 1. Match the single project document.
-    // 2. Build a unified `allIssues` array by concatenating backlog issues
-    //    (tagged with sprintId: null) and every sprint's issues (tagged with
-    //    the sprint's _id string).
-    // 3. Unwind that array so each issue becomes its own pipeline document.
-    // 4. Run $facet groupings in parallel – identical to the old per-collection
-    //    approach but now operating on the flattened embedded documents.
     const results = await db.collection('projects').aggregate([
       { $match: { _id: new ObjectId(projectId) } },
       {
         $project: {
           allIssues: {
             $concatArrays: [
-              // Backlog issues: inject a null sprintId field
               {
                 $map: {
                   input: { $ifNull: ['$backlog', []] },
@@ -61,7 +52,6 @@ export const ProjectStatsRepo = {
                   in: { $mergeObjects: ['$$issue', { _sprintId: null }] }
                 }
               },
-              // Sprint issues: inject the parent sprint's _id as sprintId
               {
                 $reduce: {
                   input: { $ifNull: ['$sprints', []] },
