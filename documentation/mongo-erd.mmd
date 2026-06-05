@@ -25,6 +25,8 @@ erDiagram
         string description
         string repositoryUrl
         ObjectId ownerId FK
+        EmbeddedSprint[] sprints
+        EmbeddedIssue[] backlog
         boolean isArchived
         date createdAt
         date updatedAt
@@ -37,39 +39,50 @@ erDiagram
         string color
     }
 
-    PROJECT_MEMBERS {
+    PROJECT_BACKLOG_ISSUES_EMBEDDED {
         ObjectId _id PK
-        ObjectId projectId FK
-        ObjectId userId FK
-        string role
-        ObjectId invitedBy FK
-        date createdAt
-        date updatedAt
-    }
-
-    SPRINTS {
-        ObjectId _id PK
-        string projectId FK
-        string name
-        string goal
-        string status
-        date startDate
-        date endDate
-        date createdAt
-        date updatedAt
-    }
-
-    ISSUES {
-        ObjectId _id PK
-        string projectId FK
-        string listId
-        ObjectId sprintId FK
+        string listId FK
         string title
         string description
         string priority
         int order
         string[] labels
         string assignee
+        date createdAt
+        date updatedAt
+    }
+
+    PROJECT_SPRINTS_EMBEDDED {
+        ObjectId _id PK
+        string name
+        string goal
+        string status
+        date startDate
+        date endDate
+        EmbeddedIssue[] issues
+        date createdAt
+        date updatedAt
+    }
+
+    SPRINT_ISSUES_EMBEDDED {
+        ObjectId _id PK
+        string listId FK
+        string title
+        string description
+        string priority
+        int order
+        string[] labels
+        string assignee
+        date createdAt
+        date updatedAt
+    }
+
+    PROJECT_MEMBERS {
+        ObjectId _id PK
+        ObjectId projectId FK
+        ObjectId userId FK
+        string role
+        ObjectId invitedBy FK
         date createdAt
         date updatedAt
     }
@@ -92,8 +105,11 @@ erDiagram
     PROJECTS ||--o{ PROJECT_MEMBERS : hasMembers
     USERS ||--o{ PROJECT_MEMBERS : invitedBy
     PROJECTS ||--o{ PROJECT_LISTS_EMBEDDED : embeds
-    PROJECTS ||--o{ SPRINTS : has
-    PROJECTS ||--o{ ISSUES : has
-    SPRINTS ||--o{ ISSUES : groups
-    USERS ||--o{ ISSUES : assignedTo
+    PROJECTS ||--o{ PROJECT_BACKLOG_ISSUES_EMBEDDED : embeds
+    PROJECTS ||--o{ PROJECT_SPRINTS_EMBEDDED : embeds
+    PROJECT_SPRINTS_EMBEDDED ||--o{ SPRINT_ISSUES_EMBEDDED : embeds
+    PROJECT_LISTS_EMBEDDED ||--o{ PROJECT_BACKLOG_ISSUES_EMBEDDED : categorizes
+    PROJECT_LISTS_EMBEDDED ||--o{ SPRINT_ISSUES_EMBEDDED : categorizes
+    USERS ||--o{ PROJECT_BACKLOG_ISSUES_EMBEDDED : assignedTo
+    USERS ||--o{ SPRINT_ISSUES_EMBEDDED : assignedTo
     USERS ||--o{ IMPORTS : creates

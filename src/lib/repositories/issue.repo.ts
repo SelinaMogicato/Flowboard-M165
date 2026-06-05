@@ -92,7 +92,6 @@ function matchesFilter(issue: any, filter: any): boolean {
 // ---------- public repo ----------
 
 export const IssueRepo = {
-  // Return ALL issues (backlog + every sprint) for a project, optionally filtered.
   async findAllByProject(projectId: string, filter: any = {}): Promise<Issue[]> {
     if (!ObjectId.isValid(projectId)) return [];
     const db = await getDb();
