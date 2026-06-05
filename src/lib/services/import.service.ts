@@ -41,146 +41,98 @@ export const ImportService = {
       const rowNum = i + 1;
       const rowErrors: ImportError[] = [];
 
-      // Validate projectId format
       if (!row.projectId || !ObjectId.isValid(row.projectId)) {
-        rowErrors.push({
-          row: rowNum,
-          field: 'projectId',
-          message: 'projectId is missing or not a valid ObjectId.',
-        });
+        rowErrors.push({ row: rowNum, field: 'projectId', message: 'projectId is missing or not a valid ObjectId.' });
       }
 
-      // Validate title
       if (!row.title || !row.title.trim()) {
-        rowErrors.push({
-          row: rowNum,
-          field: 'title',
-          message: 'title is required and must not be empty.',
-        });
+        rowErrors.push({ row: rowNum, field: 'title', message: 'title is required and must not be empty.' });
       }
 
-      // Validate priority — required, must be exactly Low / Medium / High
       if (!row.priority || !row.priority.trim()) {
-        rowErrors.push({
-          row: rowNum,
-          field: 'priority',
-          message: 'priority is required. Use Low, Medium or High.',
-        });
+        rowErrors.push({ row: rowNum, field: 'priority', message: 'priority is required. Use Low, Medium or High.' });
       } else if (!VALID_PRIORITIES.includes(row.priority as Priority)) {
-        rowErrors.push({
-          row: rowNum,
-          field: 'priority',
-          message: `"${row.priority}" is not a valid priority. Use Low, Medium or High.`,
-        });
+        rowErrors.push({ row: rowNum, field: 'priority', message: `"${row.priority}" is not a valid priority. Use Low, Medium or High.` });
       }
 
-      // Validate sprintId format if provided
       if (row.sprintId && !ObjectId.isValid(row.sprintId)) {
-        rowErrors.push({
-          row: rowNum,
-          field: 'sprintId',
-          message: 'sprintId is not a valid ObjectId.',
-        });
+        rowErrors.push({ row: rowNum, field: 'sprintId', message: 'sprintId is not a valid ObjectId.' });
       }
 
-      // If format validation failed, skip this row entirely
       if (rowErrors.length > 0) {
         errors.push(...rowErrors);
         skippedRows++;
         continue;
       }
 
-      // Check project exists in the database
       const project = await ProjectRepo.findById(row.projectId);
       if (!project) {
-        errors.push({
-          row: rowNum,
-          field: 'projectId',
-          message: `Project with id "${row.projectId}" was not found.`,
-        });
+        errors.push({ row: rowNum, field: 'projectId', message: `Project with id "${row.projectId}" was not found.` });
         skippedRows++;
         continue;
       }
 
-      // Check listId exists inside the project's embedded lists
       const list = project.lists?.find(l => l.id === row.listId);
       if (!list) {
-        errors.push({
-          row: rowNum,
-          field: 'listId',
-          message: `List "${row.listId}" does not exist in this project.`,
-        });
+        errors.push({ row: rowNum, field: 'listId', message: `List "${row.listId}" does not exist in this project.` });
         skippedRows++;
         continue;
       }
 
-      // Check sprint exists if sprintId is provided
+      // Validate sprint exists (now embedded in project.sprints[])
       if (row.sprintId) {
         const sprint = await SprintRepo.findById(row.sprintId);
         if (!sprint) {
-          errors.push({
-            row: rowNum,
-            field: 'sprintId',
-            message: `Sprint "${row.sprintId}" was not found.`,
-          });
+          errors.push({ row: rowNum, field: 'sprintId', message: `Sprint "${row.sprintId}" was not found.` });
+          skippedRows++;
+          continue;
+        }
+        // Ensure the sprint belongs to the same project
+        if (sprint.projectId !== row.projectId) {
+          errors.push({ row: rowNum, field: 'sprintId', message: `Sprint "${row.sprintId}" does not belong to project "${row.projectId}".` });
           skippedRows++;
           continue;
         }
       }
 
-      // Check assignee is a member of this project if provided
       if (row.assignee) {
         if (!ObjectId.isValid(row.assignee)) {
-          errors.push({
-            row: rowNum,
-            field: 'assignee',
-            message: 'assignee is not a valid user ObjectId.',
-          });
+          errors.push({ row: rowNum, field: 'assignee', message: 'assignee is not a valid user ObjectId.' });
           skippedRows++;
           continue;
         }
         const isMember = await ProjectMemberRepo.isProjectMember(row.projectId, row.assignee);
         if (!isMember) {
-          errors.push({
-            row: rowNum,
-            field: 'assignee',
-            message: `User "${row.assignee}" is not a member of this project.`,
-          });
+          errors.push({ row: rowNum, field: 'assignee', message: `User "${row.assignee}" is not a member of this project.` });
           skippedRows++;
           continue;
         }
       }
 
-      // Check for duplicate: same title and listId already exists
+      // Duplicate check: same title + listId in the same project
       const existing = await IssueRepo.findAllByProject(row.projectId, {
         title: row.title.trim(),
         listId: row.listId,
       });
       if (existing.length > 0) {
-        errors.push({
-          row: rowNum,
-          field: 'title',
-          message: `An issue with title "${row.title}" already exists in this list. Skipping duplicate.`,
-        });
+        errors.push({ row: rowNum, field: 'title', message: `An issue with title "${row.title}" already exists in this list. Skipping duplicate.` });
         skippedRows++;
         continue;
       }
 
-      // Determine order position
       const currentIssues = await IssueRepo.findAllByProject(row.projectId, { listId: row.listId });
       const order = currentIssues.length;
 
-      // Insert the issue (priority already validated above — no silent fallback)
       const issue = await IssueRepo.create({
         projectId: row.projectId,
+        sprintId: row.sprintId ? new ObjectId(row.sprintId) : null,
         listId: row.listId,
         title: row.title.trim(),
         priority: row.priority as Priority,
         order,
-        description: row.description || '',
-        labels: row.labels || [],
+        description: row.description ?? '',
+        labels: row.labels ?? [],
         ...(row.assignee ? { assignee: row.assignee } : {}),
-        sprintId: row.sprintId ? new ObjectId(row.sprintId) : null,
       });
 
       insertedIssues.push(issue);

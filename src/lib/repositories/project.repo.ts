@@ -1,8 +1,8 @@
-// Explanation: This repository is responsible for direct database interactions for Projects.
-// It uses the MongoDB driver to find, insert, update, and delete project documents in the 'projects' collection.
-
 import { ObjectId } from 'mongodb';
 import { getDb } from '../db/mongo';
+
+export type Priority = 'Low' | 'Medium' | 'High';
+export type SprintStatus = 'planned' | 'active' | 'completed';
 
 export interface ProjectList {
   id: string;
@@ -11,13 +11,42 @@ export interface ProjectList {
   color?: string;
 }
 
+// Issue embedded inside a sprint or the project backlog
+export interface EmbeddedIssue {
+  _id: ObjectId;
+  listId: string;
+  title: string;
+  description?: string;
+  priority: Priority;
+  order: number;
+  labels?: string[];
+  assignee?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Sprint embedded inside the project, contains its own issues
+export interface EmbeddedSprint {
+  _id: ObjectId;
+  name: string;
+  goal?: string;
+  status: SprintStatus;
+  startDate?: Date;
+  endDate?: Date;
+  issues: EmbeddedIssue[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Project {
   _id?: ObjectId;
   name: string;
   description?: string;
   repositoryUrl?: string;
-  ownerId: ObjectId; // Added ownerId
+  ownerId: ObjectId;
   lists: ProjectList[];
+  sprints?: EmbeddedSprint[];  // embedded sprints – each carries its own issues array
+  backlog?: EmbeddedIssue[];   // issues not yet assigned to any sprint
   isArchived?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -26,16 +55,13 @@ export interface Project {
 const COLLECTION = 'projects';
 
 export const ProjectRepo = {
-  // Find only projects visible to the user: owned OR invited
   async listVisibleProjectsForUser(userId: string | ObjectId, includeArchived = false, limit = 50) {
     const db = await getDb();
     const uId = typeof userId === 'string' ? new ObjectId(userId) : userId;
-    
-    // 1. Get project IDs where user is a member
+
     const memberProjects = await db.collection('projectMembers').find({ userId: uId }).project({ projectId: 1 }).toArray();
     const memberProjectIds = memberProjects.map(mp => mp.projectId);
 
-    // 2. Query projects: OR(ownerId == user, _id IN memberProjectIds)
     const query: any = {
       $or: [
         { ownerId: uId },
@@ -55,11 +81,9 @@ export const ProjectRepo = {
   },
 
   async findAll(includeArchived = false, limit = 50, ids?: ObjectId[]) {
-    // Legacy findAll, can be kept for backward compatibility or refactored out.
-    // For now, let's keep it but advise using listVisibleProjectsForUser for user-scoped queries.
     const db = await getDb();
     const query: any = includeArchived ? { isArchived: true } : { isArchived: { $ne: true } };
-    
+
     if (ids) {
       query._id = { $in: ids };
     }
@@ -81,6 +105,8 @@ export const ProjectRepo = {
     const db = await getDb();
     const doc: Project = {
       ...data,
+      sprints: data.sprints ?? [],
+      backlog: data.backlog ?? [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -91,12 +117,9 @@ export const ProjectRepo = {
   async update(id: string, data: Partial<Project>) {
     const db = await getDb();
     if (!ObjectId.isValid(id)) return null;
-    
-    const updateData = {
-      ...data,
-      updatedAt: new Date()
-    };
-    delete (updateData as any)._id; // prevent updating _id
+
+    const updateData = { ...data, updatedAt: new Date() };
+    delete (updateData as any)._id;
 
     const result = await db.collection<Project>(COLLECTION).findOneAndUpdate(
       { _id: new ObjectId(id) },

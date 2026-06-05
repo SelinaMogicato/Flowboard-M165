@@ -1,3 +1,11 @@
+// Aggregation stats for a project.
+// Issues are now embedded inside the project document:
+//   project.backlog[]            (sprintId = null)
+//   project.sprints[].issues[]   (sprintId = the parent sprint's _id)
+//
+// The pipeline below flattens both locations into a single stream before grouping.
+
+import { ObjectId } from 'mongodb';
 import { getDb } from '../db/mongo';
 
 export interface PriorityCount {
@@ -28,17 +36,56 @@ export interface ProjectStats {
   byAssignee: AssigneeCount[];
 }
 
-const COLLECTION = 'issues';
-
 export const ProjectStatsRepo = {
   async getStats(projectId: string): Promise<ProjectStats> {
     const db = await getDb();
 
-    // Single round-trip: $match filters the project's issues, then $facet runs
-    // each grouping in parallel inside MongoDB so we never load raw documents
-    // into application memory.
-    const results = await db.collection(COLLECTION).aggregate([
-      { $match: { projectId } },
+    // 1. Match the single project document.
+    // 2. Build a unified `allIssues` array by concatenating backlog issues
+    //    (tagged with sprintId: null) and every sprint's issues (tagged with
+    //    the sprint's _id string).
+    // 3. Unwind that array so each issue becomes its own pipeline document.
+    // 4. Run $facet groupings in parallel – identical to the old per-collection
+    //    approach but now operating on the flattened embedded documents.
+    const results = await db.collection('projects').aggregate([
+      { $match: { _id: new ObjectId(projectId) } },
+      {
+        $project: {
+          allIssues: {
+            $concatArrays: [
+              // Backlog issues: inject a null sprintId field
+              {
+                $map: {
+                  input: { $ifNull: ['$backlog', []] },
+                  as: 'issue',
+                  in: { $mergeObjects: ['$$issue', { _sprintId: null }] }
+                }
+              },
+              // Sprint issues: inject the parent sprint's _id as sprintId
+              {
+                $reduce: {
+                  input: { $ifNull: ['$sprints', []] },
+                  initialValue: [],
+                  in: {
+                    $concatArrays: [
+                      '$$value',
+                      {
+                        $map: {
+                          input: { $ifNull: ['$$this.issues', []] },
+                          as: 'issue',
+                          in: { $mergeObjects: ['$$issue', { _sprintId: '$$this._id' }] }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      { $unwind: { path: '$allIssues', preserveNullAndEmptyArrays: false } },
+      { $replaceRoot: { newRoot: '$allIssues' } },
       {
         $facet: {
           total: [
@@ -55,13 +102,11 @@ export const ProjectStatsRepo = {
             { $sort: { count: -1 } }
           ],
           bySprint: [
-            { $group: { _id: '$sprintId', count: { $sum: 1 } } },
+            { $group: { _id: '$_sprintId', count: { $sum: 1 } } },
             {
               $project: {
                 _id: 0,
-                // $toString returns null when the input is null, and the hex
-                // string when the input is an ObjectId.
-                sprintId: { $toString: '$_id' },
+                sprintId: { $cond: { if: { $eq: ['$_id', null] }, then: null, else: { $toString: '$_id' } } },
                 count: 1
               }
             },
