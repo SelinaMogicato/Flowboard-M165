@@ -10,5 +10,22 @@ services:
     volumes:
       - flowboard-mongo-data:/data/db
 
+  app:
+    build: .
+    container_name: flowboard-app
+    ports:
+      - "10000:10000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 10000
+      MONGODB_URI: mongodb://root:M7r9UsUadPwXYZorpWCG3GY4crtBME5KmM8GHqV46PTwtH2LyYikug3aNgtG9MJQED19bmJDtXQfccbbTJ8R@mongo:27017/?authSource=admin
+      MONGODB_DB: flowboard
+      SESSION_COOKIE_NAME: flowboard_session
+      SESSION_TTL_DAYS: 7
+      PASSWORD_BCRYPT_ROUNDS: 12
+      SESSION_SECRET: change-me-in-production
+    depends_on:
+      - mongo
+
 volumes:
   flowboard-mongo-data:
